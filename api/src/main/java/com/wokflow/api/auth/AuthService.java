@@ -52,6 +52,8 @@ public class AuthService {
 
     public String hash(String password) { return hasher.encode(password); }
 
+    public boolean matches(String raw, String hash) { return hasher.matches(raw, hash); }
+
     public Session signUp(String email, String password, String name, String clientIp) {
         return signUp(email, password, name, clientIp, Role.CUSTOMER);
     }

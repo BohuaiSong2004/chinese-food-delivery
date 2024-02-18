@@ -57,8 +57,11 @@ public abstract class IntegrationTest {
             .waitingFor(Wait.forHttp("/_cluster/health?wait_for_status=yellow").forPort(9200)
                     .withStartupTimeout(Duration.ofMinutes(3)));
 
+    public static final GenericContainer<?> MAILPIT = new GenericContainer<>("axllent/mailpit:v1.29").withExposedPorts(1025, 8025)
+            .waitingFor(Wait.forHttp("/api/v1/info").forPort(8025));
+
     static {
-        List.of(POSTGRES, REDIS, ES).parallelStream().forEach(GenericContainer::start);
+        List.of(POSTGRES, REDIS, ES, MAILPIT).parallelStream().forEach(GenericContainer::start);
     }
 
     @DynamicPropertySource
@@ -72,6 +75,8 @@ public abstract class IntegrationTest {
         r.add("wokflow.payments.webhook-secret", () -> WEBHOOK_SECRET);
         r.add("spring.datasource.hikari.maximum-pool-size", () -> 30);
         r.add("wokflow.images.dir", () -> IMAGE_DIR.toString());
+        r.add("spring.mail.host", MAILPIT::getHost);
+        r.add("spring.mail.port", () -> MAILPIT.getMappedPort(1025));
     }
 
     @TestConfiguration

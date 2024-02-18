@@ -40,6 +40,12 @@ public class RefreshTokenRepository {
                 .params(java.sql.Timestamp.from(at), family).update();
     }
 
+    /** Ends every session of a user (password changed or reset). */
+    public int revokeAll(long userId, Instant at) {
+        return db.sql("update refresh_tokens set revoked_at = ? where user_id = ? and revoked_at is null")
+                .params(java.sql.Timestamp.from(at), userId).update();
+    }
+
     public int deleteExpired(Instant before) {
         return db.sql("delete from refresh_tokens where expires_at < ?").param(java.sql.Timestamp.from(before)).update();
     }
