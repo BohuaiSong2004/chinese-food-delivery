@@ -47,8 +47,8 @@ public class SecurityConfig {
 
     /** Verifies signature (ES256 only), expiry, issuer and audience — no database or network call. */
     @Bean
-    JwtDecoder jwtDecoder(JwtKeys keys, AppProperties props) {
-        return decoder(keys, props);
+    JwtDecoder jwtDecoder(JwtKeys keys, AppProperties props, java.time.Clock clock) {
+        return new com.wokflow.api.auth.VerifiedTokenCache(decoder(keys, props), clock);
     }
 
     public static JwtDecoder decoder(JwtKeys keys, AppProperties props) {
