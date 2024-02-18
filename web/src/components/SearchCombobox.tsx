@@ -34,6 +34,7 @@ export function SearchCombobox({ id, initial = '', label, placeholder, button, o
   const [recent, setRecent] = useState<string[]>(recentSearches);
   const [found, setFound] = useState<{ q: string; s: Suggestions } | null>(null);
   const cache = useRef(new Map<string, Suggestions>());
+  const composing = useRef(false);
   const typed = text.trim();
   const point = deliverTo ? `&lat=${deliverTo.lat.toFixed(4)}&lng=${deliverTo.lng.toFixed(4)}` : '';
 
@@ -85,6 +86,9 @@ export function SearchCombobox({ id, initial = '', label, placeholder, button, o
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // While a Chinese (or Japanese, Korean…) input method is composing, Enter confirms the candidate and the
+    // arrow keys move through candidates: leave them to it. Safari reports keyCode 229 for these keys.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (!open) { setOpen(true); setActive(e.key === 'ArrowDown' ? 0 : options.length - 1); return; }
@@ -94,7 +98,7 @@ export function SearchCombobox({ id, initial = '', label, placeholder, button, o
     } else if (e.key === 'Escape') {
       if (expanded) { e.preventDefault(); setOpen(false); setActive(-1); }
       else if (text) { e.preventDefault(); setText(''); }
-    } else if (e.key === 'Enter' && activeOption) {
+    } else if (e.key === 'Enter' && activeOption && !composing.current) {
       e.preventDefault();
       choose(activeOption);
     }
@@ -139,7 +143,7 @@ export function SearchCombobox({ id, initial = '', label, placeholder, button, o
 
   return (
     <form role="search" className="search-form combobox" method="get" action="/search"
-      onSubmit={(e) => { e.preventDefault(); search(text); }}>
+      onSubmit={(e) => { e.preventDefault(); if (!composing.current) search(text); }}>
       <label htmlFor={id} className="visually-hidden">{label}</label>
       <input id={id} name="q" type="search" value={text} placeholder={placeholder} autoComplete="off" spellCheck={false}
         role="combobox" aria-autocomplete="list" aria-expanded={expanded} aria-controls={listId}
@@ -147,7 +151,10 @@ export function SearchCombobox({ id, initial = '', label, placeholder, button, o
         onChange={(e) => { setText(e.target.value); setOpen(true); setActive(-1); }}
         onFocus={() => setOpen(true)}
         onBlur={() => { setOpen(false); setActive(-1); }}
-        onKeyDown={onKeyDown} />
+        onKeyDown={onKeyDown}
+        onCompositionStart={() => { composing.current = true; }}
+        // Safari fires the Enter that confirmed the candidate after compositionend: clear on the next tick
+        onCompositionEnd={() => { setTimeout(() => { composing.current = false; }, 0); }} />
       <button type="submit">{button}</button>
       <div id={listId} role="listbox" aria-label={t('suggest.label')} className="suggestions" hidden={!expanded}>
         {!typed && options.length > 0 && (

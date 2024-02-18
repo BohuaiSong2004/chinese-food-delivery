@@ -22,5 +22,7 @@ export function useFetch<T>(path: string | null) {
 
   const reload = useCallback(() => setTick((n) => n + 1), []);
   const setData = useCallback((d: T) => setState((s) => ({ ...s, data: d })), []);
-  return { data: state.data, loading: state.path !== path, error, reload, setData };
+  // No path means nothing should be shown: without this, a list fetched for the previous user stayed on screen
+  // after signing out (the effect does not run for a null path, so the old state was never replaced).
+  return { data: path ? state.data : null, loading: path !== null && state.path !== path, error: path ? error : null, reload, setData };
 }

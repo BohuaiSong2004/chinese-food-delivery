@@ -74,7 +74,7 @@ export function Search() {
             {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{t(`search.spice${n}` as 'search.spice0')}</option>)}
           </select>
           {(tags.length > 0 || cuisine || maxSpice) && (
-            <button type="button" className="link-button" onClick={() => setParams(q ? { q } : {}, { replace: true })}>{t('search.clear')}</button>
+            <button type="button" className="link-button" onClick={() => setParams(keepOnly(params, ['q', 'sort']), { replace: true })}>{t('search.clear')}</button>
           )}
         </aside>
 
@@ -99,7 +99,7 @@ export function Search() {
                 <>
                   <p>{t('search.none')}</p>
                   {res.data.withoutFilters ? (
-                    <p><button type="button" className="link-button" onClick={() => setParams(q ? { q } : {}, { replace: true })}>
+                    <p><button type="button" className="link-button" onClick={() => setParams(keepOnly(params, ['q', 'sort']), { replace: true })}>
                       {t('search.withoutFilters', { n: res.data.withoutFilters })}</button></p>
                   ) : null}
                   {popular.data && popular.data.length > 0 && (
@@ -124,6 +124,16 @@ export function Search() {
       </div>
     </div>
   );
+}
+
+/** The same search without the sidebar filters: words and sort order stay. */
+export function keepOnly(params: URLSearchParams, keys: string[]): URLSearchParams {
+  const next = new URLSearchParams();
+  for (const k of keys) {
+    const v = params.get(k);
+    if (v) next.set(k, v);
+  }
+  return next;
 }
 
 function Result({ h }: { h: DishHit }) {
