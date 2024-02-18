@@ -85,6 +85,7 @@ legend { font-weight: 600; margin-bottom: .25rem; }
 .notice.error { background: #fdecea; border-color: #f0b6b1; }
 
 .search-layout { display: grid; gap: 1.5rem; grid-template-columns: 15rem 1fr; }
+.stale { opacity: .55; transition: opacity .15s; }
 .results { list-style: none; padding: 0; margin: 0; display: grid; gap: .75rem; }
 .dish-hit p { margin: .25rem 0; }
 
