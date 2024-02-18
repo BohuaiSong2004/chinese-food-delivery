@@ -104,7 +104,7 @@ export function Cart() {
       </dl>
       {delivery && delivery.deliverable && <p className="muted">{t('cart.eta', { min: delivery.etaMinutes })}</p>}
       {short > 0 && <p className="notice">{t('cart.belowMin', { amount: money(short) })}</p>}
-      <GoesWith pairs={pairs.data} menu={quote.data} onAdd={(d) => {
+      <GoesWith pairs={pairs.data} menu={quote.data} inCart={chosen} onAdd={(d) => {
         add({ id: cart.restaurantId, slug: cart.restaurantSlug, name: cart.restaurantName, nameZh: cart.restaurantNameZh,
           deliveryFeeCents: cart.deliveryFeeCents, minOrderCents: cart.minOrderCents },
         { dishId: d.id, name: d.name, nameZh: d.nameZh, priceCents: d.priceCents });
@@ -151,11 +151,14 @@ export function Cart() {
 
 
 /** Dishes often ordered with what is in the cart, shown only when the menu says they can be ordered now. */
-function GoesWith({ pairs, menu, onAdd }: { pairs: Pairing[] | null; menu: MenuView | null; onAdd: (d: DishView) => void }) {
+function GoesWith({ pairs, menu, inCart, onAdd }: {
+  pairs: Pairing[] | null; menu: MenuView | null; inCart: number[]; onAdd: (d: DishView) => void;
+}) {
   const { t, names } = useI18n();
   if (!pairs || !menu || !menu.restaurant.acceptingOrders) return null;
   const dishes = new Map(menu.categories.flatMap((c) => c.dishes).map((d) => [d.id, d]));
-  const shown = pairs.map((p) => dishes.get(p.dishId))
+  // the previous answer stays up while the next loads: drop what was just added rather than offer it again
+  const shown = pairs.filter((p) => !inCart.includes(p.dishId)).map((p) => dishes.get(p.dishId))
     .filter((d): d is DishView => d !== undefined && d.available && (!d.limited || (d.stockRemaining ?? 0) > 0));
   if (!shown.length) return null;
   return (
