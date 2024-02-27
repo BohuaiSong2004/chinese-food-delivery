@@ -1,0 +1,189 @@
+{
+  "restaurants": [
+    {
+      "slug": "lucky-star-dumplings", "name": "Lucky Star Dumplings", "nameZh": "福星饺子馆",
+      "description": "Dongbei-style dumplings folded to order, open around the clock.",
+      "cuisine": "dongbei", "tags": ["dumplings", "late-night"], "neighborhood": "Alhambra",
+      "address": "118 W Main St, Alhambra, CA", "deliveryFeeCents": 299, "minOrderCents": 1000, "prepMinutes": 15,
+      "opensAt": "00:00", "closesAt": "00:00", "open24h": true, "staff": ["merchant@example.com"],
+      "categories": [
+        { "name": "Dumplings", "nameZh": "饺子", "dishes": [
+          { "name": "Pork & Napa Cabbage Dumplings", "nameZh": "猪肉白菜饺子", "description": "Twelve boiled dumplings with black vinegar.", "priceCents": 1295, "tags": ["dumplings", "signature"], "spice": 0 },
+          { "name": "Lamb & Coriander Dumplings", "nameZh": "羊肉香菜饺子", "description": "Twelve boiled dumplings, cumin chili dip.", "priceCents": 1495, "tags": ["dumplings", "halal"], "spice": 1 },
+          { "name": "Pork & Chive Pan-Fried Dumplings", "nameZh": "韭菜猪肉锅贴", "description": "Ten potstickers with a crisp lace skirt.", "priceCents": 1395, "tags": ["dumplings"], "spice": 0, "dailyStock": 60 },
+          { "name": "Egg & Chive Dumplings", "nameZh": "韭菜鸡蛋饺子", "description": "Twelve vegetarian boiled dumplings.", "priceCents": 1195, "tags": ["dumplings", "vegetarian"], "spice": 0 },
+          { "name": "Shrimp & Pork Soup Dumplings", "nameZh": "虾仁鲜肉小笼包", "description": "Eight soup dumplings, steamed to order. Limited daily.", "priceCents": 1595, "tags": ["dumplings", "seafood", "signature"], "spice": 0, "dailyStock": 40 }
+        ]},
+        { "name": "Northeast Classics", "nameZh": "东北菜", "dishes": [
+          { "name": "Sweet and Sour Crispy Pork", "nameZh": "锅包肉", "description": "Double-fried pork tenderloin, tangy glaze.", "priceCents": 1895, "tags": ["signature"], "spice": 0 },
+          { "name": "Di San Xian", "nameZh": "地三鲜", "description": "Eggplant, potato and green pepper in garlic sauce.", "priceCents": 1495, "tags": ["vegan", "vegetarian"], "spice": 0 },
+          { "name": "Cumin Lamb Skewers", "nameZh": "孜然羊肉串", "description": "Five charcoal skewers with cumin and chili.", "priceCents": 1295, "tags": ["halal", "grill"], "spice": 2 },
+          { "name": "Pickled Cabbage Pork Stew", "nameZh": "酸菜白肉", "description": "Sour cabbage, pork belly and glass noodles.", "priceCents": 1795, "tags": ["soup"], "spice": 0 }
+        ]}
+      ]
+    },
+    {
+      "slug": "midnight-congee", "name": "Midnight Congee", "nameZh": "午夜粥铺",
+      "description": "Hong Kong cha chaan teng comfort food, all night long.",
+      "cuisine": "cantonese", "tags": ["congee", "late-night"], "neighborhood": "Alhambra",
+      "address": "402 E Valley Blvd, Alhambra, CA", "deliveryFeeCents": 349, "minOrderCents": 800, "prepMinutes": 12,
+      "opensAt": "00:00", "closesAt": "00:00", "open24h": true, "staff": ["merchant@example.com"],
+      "categories": [
+        { "name": "Congee", "nameZh": "粥", "dishes": [
+          { "name": "Century Egg & Pork Congee", "nameZh": "皮蛋瘦肉粥", "description": "Silky rice porridge, preserved egg, shredded pork.", "priceCents": 1095, "tags": ["congee", "signature", "gluten-free"], "spice": 0 },
+          { "name": "Fish Fillet Congee", "nameZh": "鱼片粥", "description": "Fresh rockfish, ginger and scallion.", "priceCents": 1295, "tags": ["congee", "seafood", "gluten-free"], "spice": 0 },
+          { "name": "Plain Congee with Fried Dough", "nameZh": "白粥油条", "description": "Comforting plain congee and a crisp youtiao.", "priceCents": 795, "tags": ["congee", "vegan", "vegetarian"], "spice": 0 }
+        ]},
+        { "name": "Rice & Noodles", "nameZh": "饭面", "dishes": [
+          { "name": "Wonton Noodle Soup", "nameZh": "云吞面", "description": "Shrimp wontons, thin egg noodles, superior broth.", "priceCents": 1395, "tags": ["noodles", "soup", "seafood"], "spice": 0 },
+          { "name": "Beef Chow Fun", "nameZh": "干炒牛河", "description": "Wok-charred rice noodles with flank steak.", "priceCents": 1595, "tags": ["noodles", "signature"], "spice": 0 },
+          { "name": "Baked Pork Chop Rice", "nameZh": "焗猪扒饭", "description": "Pork chop over fried rice with tomato sauce and cheese.", "priceCents": 1695, "tags": ["rice"], "spice": 0 },
+          { "name": "Char Siu Rice", "nameZh": "叉烧饭", "description": "Honey-glazed barbecue pork over rice.", "priceCents": 1495, "tags": ["rice", "bbq"], "spice": 0, "dailyStock": 50 }
+        ]},
+        { "name": "Drinks", "nameZh": "饮品", "dishes": [
+          { "name": "Hong Kong Milk Tea", "nameZh": "港式奶茶", "description": "Strong black tea pulled with evaporated milk.", "priceCents": 495, "tags": ["drink", "vegetarian"], "spice": 0 },
+          { "name": "Iced Lemon Tea", "nameZh": "冻柠茶", "description": "Ceylon tea, fresh lemon.", "priceCents": 450, "tags": ["drink", "vegan", "vegetarian"], "spice": 0 }
+        ]}
+      ]
+    },
+    {
+      "slug": "chengdu-night-market", "name": "Chengdu Night Market", "nameZh": "成都夜市",
+      "description": "Sichuan street food with numbing peppercorns and chili oil.",
+      "cuisine": "sichuan", "tags": ["spicy"], "neighborhood": "San Gabriel",
+      "address": "250 W Valley Blvd, San Gabriel, CA", "deliveryFeeCents": 399, "minOrderCents": 1500, "prepMinutes": 20,
+      "opensAt": "11:00", "closesAt": "23:00", "open24h": false, "staff": ["merchant@example.com"],
+      "categories": [
+        { "name": "Signatures", "nameZh": "招牌菜", "dishes": [
+          { "name": "Mapo Tofu", "nameZh": "麻婆豆腐", "description": "Silken tofu, minced beef, doubanjiang, Sichuan peppercorn.", "priceCents": 1495, "tags": ["signature", "tofu"], "spice": 3 },
+          { "name": "Chongqing Spicy Chicken", "nameZh": "辣子鸡", "description": "Crispy chicken bites buried in dried chilies.", "priceCents": 1895, "tags": ["signature"], "spice": 3 },
+          { "name": "Fish in Chili Oil", "nameZh": "水煮鱼", "description": "Poached fish fillets in a sizzling chili-oil broth.", "priceCents": 2495, "tags": ["seafood"], "spice": 3 },
+          { "name": "Twice-Cooked Pork", "nameZh": "回锅肉", "description": "Pork belly, leeks, fermented black beans.", "priceCents": 1795, "tags": [], "spice": 2 },
+          { "name": "Kung Pao Chicken", "nameZh": "宫保鸡丁", "description": "Chicken, peanuts, dried chilies, tangy sauce.", "priceCents": 1695, "tags": ["peanuts"], "spice": 2 }
+        ]},
+        { "name": "Noodles & Snacks", "nameZh": "小吃", "dishes": [
+          { "name": "Dan Dan Noodles", "nameZh": "担担面", "description": "Wheat noodles, chili oil, sesame paste, pork crumble.", "priceCents": 1295, "tags": ["noodles"], "spice": 2 },
+          { "name": "Wontons in Red Chili Oil", "nameZh": "红油抄手", "description": "Ten pork wontons in garlicky chili oil.", "priceCents": 1195, "tags": ["dumplings"], "spice": 2 },
+          { "name": "Dry-Fried Green Beans", "nameZh": "干煸四季豆", "description": "Blistered green beans with preserved mustard greens.", "priceCents": 1395, "tags": ["vegetarian"], "spice": 1 },
+          { "name": "Sweet Water Noodles", "nameZh": "甜水面", "description": "Thick noodles in sweet soy and chili.", "priceCents": 1095, "tags": ["noodles", "vegan", "vegetarian"], "spice": 2 }
+        ]}
+      ]
+    },
+    {
+      "slug": "golden-harbor-dim-sum", "name": "Golden Harbor Dim Sum", "nameZh": "金港点心",
+      "description": "Cantonese dim sum made each morning, served until the afternoon.",
+      "cuisine": "cantonese", "tags": ["dim-sum"], "neighborhood": "Monterey Park",
+      "address": "700 N Atlantic Blvd, Monterey Park, CA", "deliveryFeeCents": 349, "minOrderCents": 2000, "prepMinutes": 25,
+      "opensAt": "09:00", "closesAt": "15:00", "open24h": false, "staff": ["partners@example.com"],
+      "categories": [
+        { "name": "Steamed", "nameZh": "蒸点", "dishes": [
+          { "name": "Shrimp Dumplings", "nameZh": "虾饺", "description": "Four har gow with translucent wrappers.", "priceCents": 795, "tags": ["dim-sum", "seafood", "signature", "gluten-free"], "spice": 0, "dailyStock": 80 },
+          { "name": "Pork & Shrimp Siu Mai", "nameZh": "烧卖", "description": "Four open-topped dumplings with fish roe.", "priceCents": 750, "tags": ["dim-sum", "seafood"], "spice": 0 },
+          { "name": "BBQ Pork Buns", "nameZh": "叉烧包", "description": "Three fluffy buns with char siu.", "priceCents": 695, "tags": ["dim-sum", "bbq"], "spice": 0 },
+          { "name": "Rice Noodle Rolls with Shrimp", "nameZh": "虾肠粉", "description": "Silky cheung fun with sweet soy.", "priceCents": 850, "tags": ["dim-sum", "seafood", "gluten-free"], "spice": 0 },
+          { "name": "Chicken Feet in Black Bean Sauce", "nameZh": "豉汁凤爪", "description": "Braised then steamed, tender and rich.", "priceCents": 695, "tags": ["dim-sum"], "spice": 1 }
+        ]},
+        { "name": "Baked & Fried", "nameZh": "煎炸", "dishes": [
+          { "name": "Egg Tarts", "nameZh": "蛋挞", "description": "Three flaky custard tarts, baked hourly.", "priceCents": 650, "tags": ["dessert", "vegetarian"], "spice": 0 },
+          { "name": "Taro Dumplings", "nameZh": "芋角", "description": "Three crisp taro puffs with pork filling.", "priceCents": 695, "tags": ["dim-sum"], "spice": 0 },
+          { "name": "Turnip Cake", "nameZh": "萝卜糕", "description": "Pan-fried radish cake with lap cheong.", "priceCents": 650, "tags": ["dim-sum"], "spice": 0 }
+        ]}
+      ]
+    },
+    {
+      "slug": "lanzhou-noodle-house", "name": "Lanzhou Noodle House", "nameZh": "兰州牛肉面",
+      "description": "Halal hand-pulled beef noodles in clear broth, pulled to your chosen thickness.",
+      "cuisine": "northwestern", "tags": ["halal", "noodles"], "neighborhood": "Alhambra",
+      "address": "1420 W Valley Blvd, Alhambra, CA", "deliveryFeeCents": 299, "minOrderCents": 1000, "prepMinutes": 15,
+      "opensAt": "10:30", "closesAt": "21:30", "open24h": false, "staff": ["partners@example.com"],
+      "categories": [
+        { "name": "Noodles", "nameZh": "面", "dishes": [
+          { "name": "Lanzhou Beef Noodle Soup", "nameZh": "兰州牛肉拉面", "description": "Clear beef broth, radish, chili oil, cilantro.", "priceCents": 1395, "tags": ["noodles", "soup", "halal", "signature"], "spice": 1 },
+          { "name": "Stir-Fried Hand-Pulled Noodles", "nameZh": "炒拉面", "description": "Wok-tossed with beef, tomato and peppers.", "priceCents": 1495, "tags": ["noodles", "halal"], "spice": 1 },
+          { "name": "Big Plate Chicken with Noodles", "nameZh": "大盘鸡拌面", "description": "Xinjiang chicken and potato stew over belt noodles.", "priceCents": 2295, "tags": ["noodles", "halal"], "spice": 2 },
+          { "name": "Cold Skin Noodles", "nameZh": "酿皮", "description": "Chewy wheat-starch noodles in vinegar and chili.", "priceCents": 995, "tags": ["noodles", "vegan", "vegetarian", "halal"], "spice": 2 }
+        ]},
+        { "name": "Sides", "nameZh": "小菜", "dishes": [
+          { "name": "Smashed Cucumber Salad", "nameZh": "拍黄瓜", "description": "Garlic, black vinegar, sesame oil.", "priceCents": 695, "tags": ["vegan", "vegetarian", "halal", "gluten-free"], "spice": 1 },
+          { "name": "Braised Beef Slices", "nameZh": "卤牛肉", "description": "Cold five-spice beef shank.", "priceCents": 1195, "tags": ["halal"], "spice": 0 },
+          { "name": "Lamb Skewers", "nameZh": "羊肉串", "description": "Three skewers, cumin and chili flakes.", "priceCents": 995, "tags": ["halal", "grill"], "spice": 2 }
+        ]}
+      ]
+    },
+    {
+      "slug": "xian-spice-road", "name": "Xi'an Spice Road", "nameZh": "西安味道",
+      "description": "Shaanxi street food: cumin lamb, biang biang noodles, rou jia mo.",
+      "cuisine": "shaanxi", "tags": ["spicy", "noodles"], "neighborhood": "Rowland Heights",
+      "address": "18300 Colima Rd, Rowland Heights, CA", "deliveryFeeCents": 449, "minOrderCents": 1500, "prepMinutes": 20,
+      "opensAt": "11:00", "closesAt": "22:00", "open24h": false, "staff": ["partners@example.com"],
+      "categories": [
+        { "name": "House Specials", "nameZh": "招牌", "dishes": [
+          { "name": "Biang Biang Noodles", "nameZh": "油泼扯面", "description": "Belt-wide noodles splashed with hot oil and chili.", "priceCents": 1395, "tags": ["noodles", "vegan", "vegetarian", "signature"], "spice": 2 },
+          { "name": "Spicy Cumin Lamb Noodles", "nameZh": "孜然羊肉面", "description": "Hand-ripped noodles with cumin lamb.", "priceCents": 1595, "tags": ["noodles", "halal"], "spice": 3 },
+          { "name": "Chinese Burger (Rou Jia Mo)", "nameZh": "肉夹馍", "description": "Braised pork belly in a griddled bun.", "priceCents": 895, "tags": ["signature"], "spice": 1 },
+          { "name": "Liang Pi Cold Noodles", "nameZh": "凉皮", "description": "Cold rice-flour noodles, cucumber, chili vinegar.", "priceCents": 1095, "tags": ["noodles", "vegan", "vegetarian"], "spice": 2 },
+          { "name": "Lamb Paomo Soup", "nameZh": "羊肉泡馍", "description": "Torn flatbread in rich lamb soup.", "priceCents": 1695, "tags": ["soup", "halal"], "spice": 0 }
+        ]}
+      ]
+    },
+    {
+      "slug": "shanghai-soup-dumpling-house", "name": "Shanghai Soup Dumpling House", "nameZh": "上海汤包馆",
+      "description": "Jiangnan classics and soup dumplings pleated eighteen times.",
+      "cuisine": "shanghainese", "tags": ["dumplings"], "neighborhood": "Arcadia",
+      "address": "1108 S Baldwin Ave, Arcadia, CA", "deliveryFeeCents": 399, "minOrderCents": 1500, "prepMinutes": 25,
+      "opensAt": "11:00", "closesAt": "21:00", "open24h": false, "staff": ["partners@example.com"],
+      "categories": [
+        { "name": "Dumplings", "nameZh": "点心", "dishes": [
+          { "name": "Pork Xiaolongbao", "nameZh": "鲜肉小笼包", "description": "Eight soup dumplings with ginger vinegar.", "priceCents": 1395, "tags": ["dumplings", "signature"], "spice": 0, "dailyStock": 120 },
+          { "name": "Crab & Pork Xiaolongbao", "nameZh": "蟹粉小笼包", "description": "Eight soup dumplings with crab roe.", "priceCents": 1895, "tags": ["dumplings", "seafood"], "spice": 0, "dailyStock": 40 },
+          { "name": "Pan-Fried Pork Buns", "nameZh": "生煎包", "description": "Four crisp-bottomed buns with sesame and scallion.", "priceCents": 1095, "tags": ["dumplings"], "spice": 0 }
+        ]},
+        { "name": "Jiangnan Plates", "nameZh": "江南菜", "dishes": [
+          { "name": "Red-Braised Pork Belly", "nameZh": "红烧肉", "description": "Slow-braised in Shaoxing wine and rock sugar.", "priceCents": 2195, "tags": ["signature"], "spice": 0 },
+          { "name": "Shanghai Fried Thick Noodles", "nameZh": "上海粗炒", "description": "Udon-style noodles, pork, bok choy, dark soy.", "priceCents": 1495, "tags": ["noodles"], "spice": 0 },
+          { "name": "Scallion Oil Noodles", "nameZh": "葱油拌面", "description": "Thin noodles tossed in fried scallion oil.", "priceCents": 1095, "tags": ["noodles", "vegan", "vegetarian"], "spice": 0 },
+          { "name": "Sweet Osmanthus Rice Cakes", "nameZh": "桂花糖年糕", "description": "Chewy rice cakes in osmanthus syrup.", "priceCents": 795, "tags": ["dessert", "vegan", "vegetarian", "gluten-free"], "spice": 0 }
+        ]}
+      ]
+    },
+    {
+      "slug": "hunan-smokehouse", "name": "Hunan Smokehouse", "nameZh": "湘味小馆",
+      "description": "Smoky, sour and fiery Hunan home cooking.",
+      "cuisine": "hunan", "tags": ["spicy"], "neighborhood": "Temple City",
+      "address": "9200 Las Tunas Dr, Temple City, CA", "deliveryFeeCents": 399, "minOrderCents": 1500, "prepMinutes": 25,
+      "opensAt": "11:00", "closesAt": "22:00", "open24h": false, "staff": ["partners@example.com"],
+      "categories": [
+        { "name": "Hunan Classics", "nameZh": "湘菜", "dishes": [
+          { "name": "Hunan Red-Braised Pork", "nameZh": "湘式红烧肉", "description": "Caramelized pork belly with chilies and star anise.", "priceCents": 2095, "tags": ["signature"], "spice": 2 },
+          { "name": "Steamed Fish Head with Chopped Chili", "nameZh": "剁椒鱼头", "description": "Half a fish head under pickled red chilies.", "priceCents": 2895, "tags": ["seafood", "signature", "gluten-free"], "spice": 3 },
+          { "name": "Smoked Pork with Leeks", "nameZh": "腊肉炒蒜苗", "description": "House-smoked bacon, garlic shoots.", "priceCents": 1795, "tags": [], "spice": 2 },
+          { "name": "Stir-Fried Pork with Green Chili", "nameZh": "辣椒炒肉", "description": "The Hunan rice-killer: pork and long green chilies.", "priceCents": 1695, "tags": [], "spice": 3 },
+          { "name": "Tiger Skin Peppers", "nameZh": "虎皮青椒", "description": "Charred peppers in black vinegar.", "priceCents": 1295, "tags": ["vegan", "vegetarian"], "spice": 2 }
+        ]}
+      ]
+    },
+    {
+      "slug": "taipei-late-night", "name": "Taipei Late Night", "nameZh": "台北深夜食堂",
+      "description": "Taiwanese night-market favourites, open until 3 a.m.",
+      "cuisine": "taiwanese", "tags": ["late-night"], "neighborhood": "San Gabriel",
+      "address": "140 W Valley Blvd, San Gabriel, CA", "deliveryFeeCents": 349, "minOrderCents": 1000, "prepMinutes": 15,
+      "opensAt": "17:00", "closesAt": "03:00", "open24h": false, "staff": ["partners@example.com"],
+      "categories": [
+        { "name": "Night Market", "nameZh": "夜市小吃", "dishes": [
+          { "name": "Braised Pork Rice", "nameZh": "卤肉饭", "description": "Soy-braised pork over rice with pickles.", "priceCents": 995, "tags": ["rice", "signature"], "spice": 0 },
+          { "name": "Taiwanese Beef Noodle Soup", "nameZh": "红烧牛肉面", "description": "Spicy braised beef shank, thick noodles.", "priceCents": 1695, "tags": ["noodles", "soup", "signature"], "spice": 1 },
+          { "name": "Popcorn Chicken", "nameZh": "盐酥鸡", "description": "Crispy chicken with basil and white pepper.", "priceCents": 1095, "tags": [], "spice": 1 },
+          { "name": "Oyster Omelette", "nameZh": "蚵仔煎", "description": "Oysters, egg and sweet potato starch, sweet chili sauce.", "priceCents": 1295, "tags": ["seafood", "gluten-free"], "spice": 0 },
+          { "name": "Bubble Milk Tea", "nameZh": "珍珠奶茶", "description": "Black tea, milk, brown-sugar tapioca pearls.", "priceCents": 595, "tags": ["drink", "vegetarian"], "spice": 0 }
+        ]}
+      ]
+    }
+  ],
+  "users": [
+    { "email": "customer@example.com", "name": "Mei Lin", "role": "CUSTOMER" },
+    { "email": "merchant@example.com", "name": "Chef Wang", "role": "MERCHANT" },
+    { "email": "partners@example.com", "name": "Partner Kitchens", "role": "MERCHANT" },
+    { "email": "rider@example.com", "name": "Alex Rider", "role": "RIDER" },
+    { "email": "rider2@example.com", "name": "Sam Courier", "role": "RIDER" },
+    { "email": "admin@example.com", "name": "Ops Admin", "role": "ADMIN" }
+  ]
+}
