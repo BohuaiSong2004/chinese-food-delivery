@@ -32,7 +32,7 @@ class StockReservationsIT extends IntegrationTest {
                 .param(k.limitedDish()).query(Long.class).single();
         UUID order = UUID.randomUUID();
         var qty = new TreeMap<Long, Integer>(Map.of(k.limitedDish(), 2, second, 2)); // second has only 1
-        assertThat(reservations.reserve(order, qty)).contains(second);
+        assertThat(reservations.reserve(order, 1L, unique("k"), qty)).isEqualTo(new StockReservations.Result.SoldOut(second));
         assertThat(stock(k.limitedDish())).isEqualTo(5); // the first dish was given back
         assertThat(stock(second)).isEqualTo(1);
         assertThat(holds(order)).isZero();
@@ -42,7 +42,8 @@ class StockReservationsIT extends IntegrationTest {
     void abandonedReservationsAreSweptBackIntoStock() {
         var k = newKitchen(10);
         UUID neverCreated = UUID.randomUUID();
-        assertThat(reservations.reserve(neverCreated, new TreeMap<>(Map.of(k.limitedDish(), 3)))).isEmpty();
+        assertThat(reservations.reserve(neverCreated, 1L, unique("k"), new TreeMap<>(Map.of(k.limitedDish(), 3))))
+                .isInstanceOf(StockReservations.Result.Reserved.class);
         assertThat(stock(k.limitedDish())).isEqualTo(7);
         assertThat(reservations.sweepOrphans()).isZero(); // too recent: the order may still be committing
         db.sql("update stock_holds set created_at = now() - interval '10 minutes' where order_id = ?").param(neverCreated).update();
@@ -51,14 +52,28 @@ class StockReservationsIT extends IntegrationTest {
     }
 
     @Test
-    void placedOrdersLeaveNoHoldsAndConcurrentRetriesReserveOnce() throws Exception {
+    void aRetryWhileTheOriginalHoldsStockIsToldItIsInFlight() {
         var k = newKitchen(10);
+        String key = unique("k");
+        var qty = new TreeMap<Long, Integer>(Map.of(k.limitedDish(), 2));
+        assertThat(reservations.reserve(UUID.randomUUID(), 7L, key, qty)).isInstanceOf(StockReservations.Result.Reserved.class);
+        assertThat(reservations.reserve(UUID.randomUUID(), 7L, key, qty)).isInstanceOf(StockReservations.Result.InFlight.class);
+        assertThat(stock(k.limitedDish())).isEqualTo(8); // the retry's decrement was rolled back with its statement
+        assertThat(reservations.held(7L, key)).isTrue();
+    }
+
+    @org.junit.jupiter.api.RepeatedTest(5) // a race: repeat to give it more chances to show up
+    void placedOrdersLeaveNoHoldsAndConcurrentRetriesReserveOnce() throws Exception {
+        // the stock covers exactly one order: if retries reserved too, some would wrongly see "sold out"
+        var k = newKitchen(2);
         String customer = newCustomer();
         String key = unique("same-key-");
         List<Http.Res> results = ConcurrencyIT.burst(10, i -> () -> placeOrder(customer, k.id(), Map.of(k.limitedDish(), 2), key));
+        assertThat(results).allSatisfy(r -> assertThat(r.body().has("id")).as(r.toString()).isTrue());
         assertThat(results.stream().map(r -> r.body().get("id").asText()).distinct()).hasSize(1);
         assertThat(results.stream().filter(r -> r.status() == 201)).hasSize(1);
-        assertThat(stock(k.limitedDish())).isEqualTo(8);
+        assertThat(results).allSatisfy(r -> assertThat(r.status()).isIn(200, 201));
+        assertThat(stock(k.limitedDish())).isZero();
         assertThat(db.sql("select count(*) from stock_holds h join dishes d on d.id = h.dish_id where d.restaurant_id = ?")
                 .param(k.id()).query(Integer.class).single()).isZero();
     }

@@ -104,31 +104,51 @@ public class OrderService {
         String hash = requestHash(req.restaurantId(), qty, req.deliveryAddress(), req.deliveryNotes());
 
         Outcome outcome = placements.run(() -> {
-            var existing = orders.findByKey(user.id(), idempotencyKey);
-            if (existing.isPresent()) {
-                return replay(existing.get(), hash);
-            }
-            Priced priced = price(req, qty);
-            UUID id = UUID.randomUUID();
-            Map<Long, Integer> limited = new TreeMap<>();
-            qty.forEach((dish, n) -> {
-                if (priced.dishes().get(dish).limited()) {
-                    limited.put(dish, n);
+            for (int attempt = 0; attempt < 3; attempt++) {
+                var existing = orders.findByKey(user.id(), idempotencyKey);
+                if (existing.isPresent()) {
+                    return replay(existing.get(), hash);
                 }
-            });
-            var soldOut = stock.reserve(id, limited);
-            if (soldOut.isPresent()) {
-                throw ApiException.conflict("sold_out", priced.dishes().get(soldOut.get()).name() + " just sold out");
+                Priced priced = price(req, qty);
+                UUID id = UUID.randomUUID();
+                Map<Long, Integer> limited = new TreeMap<>();
+                qty.forEach((dish, n) -> {
+                    if (priced.dishes().get(dish).limited()) {
+                        limited.put(dish, n);
+                    }
+                });
+                var result = stock.reserve(id, user.id(), idempotencyKey, limited);
+                if (result instanceof StockReservations.Result.SoldOut
+                        // Out of stock because this same request (an earlier attempt) holds it or already ordered?
+                        // Holds first: the order commit removes them and inserts the order atomically.
+                        && (stock.held(user.id(), idempotencyKey) || orders.findByKey(user.id(), idempotencyKey).isPresent())) {
+                    result = new StockReservations.Result.InFlight();
+                }
+                switch (result) {
+                    case StockReservations.Result.SoldOut s ->
+                            throw ApiException.conflict("sold_out", priced.dishes().get(s.dishId()).name() + " just sold out");
+                    case StockReservations.Result.InFlight f -> {
+                        // A retry of a request that is still running: wait for its order rather than reserving twice.
+                        var original = awaitOriginal(user.id(), idempotencyKey);
+                        if (original.isPresent()) {
+                            return replay(original.get(), hash);
+                        }
+                        continue; // the original gave up and released its stock: try again ourselves
+                    }
+                    case StockReservations.Result.Reserved r -> { }
+                }
+                try {
+                    return tx.run(() -> create(user, req, idempotencyKey, hash, id, priced));
+                } catch (Replayed r) {
+                    stock.release(id);
+                    return r.outcome;
+                } catch (RuntimeException e) {
+                    stock.release(id); // the order did not commit: give the stock back now
+                    throw e;
+                }
             }
-            try {
-                return tx.run(() -> create(user, req, idempotencyKey, hash, id, priced));
-            } catch (Replayed r) {
-                stock.release(id);
-                return r.outcome;
-            } catch (RuntimeException e) {
-                stock.release(id); // the order did not commit: give the stock back now
-                throw e;
-            }
+            throw new com.wokflow.api.common.RetryableApiException(HttpStatus.CONFLICT, "idempotency_in_progress",
+                    "The same order is still being placed; retry in a moment", 1);
         });
         payments.ensureCheckout(outcome.id());
         return new Placed(view(orders.find(outcome.id()).orElseThrow()), outcome.created());
@@ -195,6 +215,24 @@ public class OrderService {
             super(null, null, false, false);
             this.outcome = o;
         }
+    }
+
+    /** Polls for the order of an in-flight request with the same key, while that request still holds stock. */
+    private java.util.Optional<Order> awaitOriginal(long customerId, String key) {
+        long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+        while (System.nanoTime() < deadline) {
+            var o = orders.findByKey(customerId, key);
+            if (o.isPresent() || !stock.held(customerId, key)) {
+                return o.isPresent() ? o : orders.findByKey(customerId, key);
+            }
+            try {
+                Thread.sleep(25);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return orders.findByKey(customerId, key);
     }
 
     private static String requestHash(long restaurantId, Map<Long, Integer> qty, String address, String notes) {

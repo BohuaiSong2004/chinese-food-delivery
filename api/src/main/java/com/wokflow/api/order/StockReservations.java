@@ -33,27 +33,47 @@ public class StockReservations {
 
     public StockReservations(JdbcClient db) { this.db = db; }
 
+    public sealed interface Result {
+        record Reserved() implements Result {}
+        record SoldOut(long dishId) implements Result {}
+        /** Another request with the same customer and Idempotency-Key is reserving or creating right now. */
+        record InFlight() implements Result {}
+    }
+
     /**
-     * Reserves every limited dish or none. Returns empty on success, or the id of
-     * the dish that ran out. Must not run inside a transaction.
+     * Reserves every limited dish or none. Must not run inside a transaction.
      */
     @Transactional(propagation = Propagation.NEVER)
-    public java.util.Optional<Long> reserve(UUID orderId, Map<Long, Integer> limitedQtyAscending) {
+    public Result reserve(UUID orderId, long customerId, String idempotencyKey, Map<Long, Integer> limitedQtyAscending) {
         for (var e : limitedQtyAscending.entrySet()) {
-            int n = db.sql("""
-                    with taken as (
-                        update dishes set stock_remaining = stock_remaining - :qty
-                        where id = :dish and daily_stock is not null and stock_remaining >= :qty
-                        returning id)
-                    insert into stock_holds (order_id, dish_id, quantity) select :order, id, :qty from taken""")
-                    .param("qty", e.getValue()).param("dish", e.getKey()).param("order", orderId)
-                    .update();
+            int n;
+            try {
+                n = db.sql("""
+                        with taken as (
+                            update dishes set stock_remaining = stock_remaining - :qty
+                            where id = :dish and daily_stock is not null and stock_remaining >= :qty
+                            returning id)
+                        insert into stock_holds (order_id, dish_id, quantity, customer_id, idempotency_key)
+                        select :order, id, :qty, :customer, :key from taken""")
+                        .param("qty", e.getValue()).param("dish", e.getKey()).param("order", orderId)
+                        .param("customer", customerId).param("key", idempotencyKey)
+                        .update();
+            } catch (org.springframework.dao.DuplicateKeyException sameRequest) {
+                release(orderId); // whatever this attempt already held; the statement itself was rolled back
+                return new Result.InFlight();
+            }
             if (n == 0) {
                 release(orderId);
-                return java.util.Optional.of(e.getKey());
+                return new Result.SoldOut(e.getKey());
             }
         }
-        return java.util.Optional.empty();
+        return new Result.Reserved();
+    }
+
+    /** True while some attempt of this request still holds stock (it may yet create the order). */
+    public boolean held(long customerId, String idempotencyKey) {
+        return db.sql("select exists (select 1 from stock_holds where customer_id = ? and idempotency_key = ?)")
+                .params(customerId, idempotencyKey).query(Boolean.class).single();
     }
 
     /** Returns this order's held stock (compensation when the order was not created). Idempotent. */
