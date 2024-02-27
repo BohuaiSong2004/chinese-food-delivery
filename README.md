@@ -127,7 +127,13 @@ Dumplings, Midnight Congee, Chengdu Night Market), `partners@example.com` (the o
 `rider@example.com`, `rider2@example.com`, `admin@example.com`. Midnight Congee and Lucky Star Dumplings are
 open 24 hours, so there is always somewhere to order from; the others keep real hours in their own time zone.
 Payment happens on the MockPay page (http://localhost:8090): **Pay** or **Decline** — no card details.
-Password-reset mail is caught by Mailpit at http://localhost:8025. Monitoring is optional:
+Password-reset mail is caught by Mailpit at http://localhost:8025.
+
+The stack needs about 3 GB of memory for Docker (≈1.9 GB idle; Elasticsearch, two API replicas, Postgres) and
+the ports 8000, 8090 and 8025. To show it from a phone on the same network, start it with the
+computer's address so that payment returns and e-mailed links point there:
+`PUBLIC_ORIGIN=http://192.168.1.20:8000 MOCKPAY_PUBLIC_URL=http://192.168.1.20:8090 docker compose up -d --wait`
+(browsers only offer "use my location" on localhost or HTTPS; picking a ZIP code works everywhere). Monitoring is optional:
 `docker compose --profile observability up -d`, then Grafana at http://localhost:3000.
 
 Data lives in Docker volumes and survives `docker compose restart` / `down`; `docker compose down -v` resets.
