@@ -11,7 +11,7 @@ async function audit(page: Page) {
   expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 }
 
-for (const path of ['/', '/search?q=noodles', '/r/midnight-congee', '/r/chengdu-night-market', '/signin', '/signup', '/cart', '/partner']) {
+for (const path of ['/', '/search?q=noodles', '/r/midnight-congee', '/r/chengdu-night-market', '/signin', '/signup', '/cart', '/partner', '/forgot']) {
   test(`no WCAG 2.1 AA violations on ${path} @mobile`, async ({ page }) => {
     await page.goto(path);
     await expect(page.locator('main h1')).toBeVisible();

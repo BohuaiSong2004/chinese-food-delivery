@@ -5,7 +5,7 @@ export const PASSWORD = 'wokflow-demo';
 export async function signIn(page: Page, email: string, password = PASSWORD) {
   await page.goto('/signin');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
 }
@@ -15,7 +15,7 @@ export async function newCustomer(page: Page) {
   await page.goto('/signup');
   await page.getByLabel('Your name').fill('E2E Diner');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill('e2e-password-123');
+  await page.getByLabel('Password', { exact: true }).fill('e2e-password-123');
   await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   return email;
@@ -71,7 +71,7 @@ export async function signUpAs(page: Page, type: 'Order food' | 'List my restaur
   await page.getByRole('radio', { name: type }).check();
   await page.getByLabel('Your name').fill(name);
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill('e2e-password-123');
+  await page.getByLabel('Password', { exact: true }).fill('e2e-password-123');
   await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   return email;
