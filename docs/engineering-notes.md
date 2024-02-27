@@ -283,6 +283,23 @@ relaxed second pass — 37 → 41, later 40 after the synonym clauses were made 
 quotes the held-out numbers and says the relaxed pass was designed after seeing those misses; the 47/47 is
 only in `docs/performance.md`, labeled as the tuning set.
 
+### 23. A second read of the search work
+
+Everything passed, so the new code was read again looking for what tests had not asked about:
+
+- `小笼包` produced the variants `汤包包` and `小笼包包`: Chinese has no word boundaries, so the shorter phrase
+  小笼 also matched inside 小笼包 after the longer one had been replaced. The longest phrase now claims its
+  stretch of the query and shorter ones inside it are skipped.
+- Signing out on the home page left the previous customer's "Order again" list on screen: `useFetch` did
+  nothing when its URL became null, so the old data stayed. A null URL now means no data, for every page.
+- In the cart, the dish just added from "Often ordered together" stayed in the list (with its Add button)
+  until the next answer arrived. Dishes already in the cart are filtered out on the client too.
+- With a Chinese input method, Enter confirms the pinyin candidate and the arrow keys move through
+  candidates; the suggestion box treated them as its own (Safari also sends that Enter after
+  `compositionend`). Keys during composition are now ignored.
+- "Clear filters" also dropped the sort order; an email address or phone number typed into the search box
+  would have been listed on the admin page as a search with no results. Both fixed.
+
 ## Things deliberately left out
 
 - Access tokens are not revocable before they expire (15 minutes); that is the cost of stateless

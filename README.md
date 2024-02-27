@@ -173,8 +173,8 @@ API docs: http://localhost:8080/api/docs (OpenAPI at `/api/openapi.json`).
 ## Tests
 
 ```bash
-mvn verify                       # 158 backend tests on real Postgres, Redis, Elasticsearch, Mailpit, S3 mock (Testcontainers); JaCoCo
-cd web && npm run lint && npm run typecheck && npm test      # 32 unit tests
+mvn verify                       # 160 backend tests on real Postgres, Redis, Elasticsearch, Mailpit, S3 mock (Testcontainers); JaCoCo
+cd web && npm run lint && npm run typecheck && npm test      # 34 unit tests
 cd web && E2E_BASE_URL=http://localhost:8000 npx playwright test     # against the compose stack
 ```
 
