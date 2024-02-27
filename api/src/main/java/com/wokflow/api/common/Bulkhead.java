@@ -21,9 +21,16 @@ public class Bulkhead {
     private final Duration maxWait;
     private final AtomicInteger waiting = new AtomicInteger();
     private final String name;
+    private final io.micrometer.core.instrument.Timer queued;
+    private final io.micrometer.core.instrument.Timer held;
 
     public Bulkhead(String name, int concurrency, Duration maxWait, MeterRegistry meters) {
         this.name = name;
+        // queue time vs. time holding a permit: separates "waiting for a slot" from "doing the work"
+        this.queued = io.micrometer.core.instrument.Timer.builder("wokflow.bulkhead.queued").tag("name", name)
+                .publishPercentileHistogram().register(meters);
+        this.held = io.micrometer.core.instrument.Timer.builder("wokflow.bulkhead.held").tag("name", name)
+                .publishPercentileHistogram().register(meters);
         this.permits = new Semaphore(concurrency, true);
         this.maxWait = maxWait;
         Gauge.builder("wokflow.bulkhead.waiting", waiting, AtomicInteger::get).tag("name", name).register(meters);
@@ -31,6 +38,7 @@ public class Bulkhead {
 
     public <T> T run(Supplier<T> work) {
         waiting.incrementAndGet();
+        long start = System.nanoTime();
         boolean acquired;
         try {
             acquired = permits.tryAcquire(maxWait.toMillis(), TimeUnit.MILLISECONDS);
@@ -39,15 +47,18 @@ public class Bulkhead {
             acquired = false;
         } finally {
             waiting.decrementAndGet();
+            queued.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
         if (!acquired) {
             throw new RetryableApiException(HttpStatus.SERVICE_UNAVAILABLE, "busy",
                     "We are taking a lot of orders right now; please try again in a moment", 2);
         }
+        long got = System.nanoTime();
         try {
             return work.get();
         } finally {
             permits.release();
+            held.record(System.nanoTime() - got, TimeUnit.NANOSECONDS);
         }
     }
 

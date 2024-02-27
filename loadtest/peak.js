@@ -1,8 +1,8 @@
 // Peak-hour burst: N customers place orders at the same instant, then every order is paid and
 // carried through the kitchen and a rider to the door, all concurrently.
 //
-//   docker run --rm --network host -v "$PWD:/lt" grafana/k6:2.4.0 run -e VUS=600 /lt/peak.js          (all at once)
-//   docker run --rm --network host -v "$PWD:/lt" grafana/k6:2.4.0 run -e VUS=1000 -e RATE=10 /lt/peak.js (10 orders/s for 60 s)
+//   docker run --rm --network host -v "$PWD/loadtest:/lt" grafana/k6:2.4.0 run -e VUS=600 /lt/peak.js          (all at once)
+//   docker run --rm --network host -v "$PWD/loadtest:/lt" grafana/k6:2.4.0 run -e VUS=1000 -e RATE=10 /lt/peak.js (10 orders/s for 60 s)
 //
 // Needs the stack started with SEED_LOADTEST_USERS >= VUS and RATE_LIMIT_ENABLED=false (one
 // machine is every "customer", so per-IP limits would only measure the limiter). Run prepare.sh first.
