@@ -45,6 +45,7 @@ public class TokenService {
                 .claim("role", user.role().name())
                 .claim("name", user.displayName())
                 .claim("rid", restaurantIds)
+                .claim("pending", !user.approved())
                 .build();
         JwsHeader header = JwsHeader.with(SignatureAlgorithm.ES256).keyId(keys.keyId()).build();
         String token = encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();

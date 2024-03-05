@@ -160,6 +160,40 @@ public abstract class IntegrationTest {
                 .list().stream().map(u -> tokenService.issue(u, List.of()).value()).toList();
     }
 
+    /** Signs up through the API with the given account type and returns the access token. */
+    protected String newAccount(String type, String email) {
+        var r = http.post("/api/auth/signup", null, Map.of("email", email, "password", "correct-horse-1",
+                "name", "Test " + type, "accountType", type));
+        if (r.status() != 201) {
+            throw new AssertionError("sign up failed: " + r);
+        }
+        return r.body().get("accessToken").asText();
+    }
+
+    protected String signIn(String email, String password) {
+        var r = http.post("/api/auth/signin", null, Map.of("email", email, "password", password));
+        if (r.status() != 200) {
+            throw new AssertionError("sign in failed: " + r);
+        }
+        return r.body().get("accessToken").asText();
+    }
+
+    /** Polls until the condition holds (outbox, search indexing and other after-commit work). */
+    protected static void waitUntil(java.util.function.BooleanSupplier condition) {
+        long deadline = System.nanoTime() + Duration.ofSeconds(20).toNanos();
+        while (!condition.getAsBoolean()) {
+            if (System.nanoTime() > deadline) {
+                throw new AssertionError("condition not met within 20 s");
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+        }
+    }
+
     protected long deadlocks() {
         try {
             Thread.sleep(1200); // cumulative statistics are flushed about once a second

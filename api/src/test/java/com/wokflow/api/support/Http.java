@@ -44,6 +44,10 @@ public class Http {
 
     public Res patch(String path, String token, Object body) { return send("PATCH", path, token, body, Map.of()); }
 
+    public Res put(String path, String token, Object body) { return send("PUT", path, token, body, Map.of()); }
+
+    public Res delete(String path, String token) { return send("DELETE", path, token, null, Map.of()); }
+
     public Res raw(String method, String path, byte[] body, Map<String, String> headers) {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path)).timeout(Duration.ofSeconds(30))
                 .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofByteArray(body));

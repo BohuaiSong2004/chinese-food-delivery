@@ -68,6 +68,7 @@ public class SearchService {
         Query text = textQuery(c.q());
         List<Query> filters = new ArrayList<>();
         filters.add(Query.of(q -> q.term(t -> t.field("available").value(true))));
+        filters.add(Query.of(q -> q.term(t -> t.field("listed").value(true))));
         for (String tag : c.tags()) {
             filters.add(Query.of(q -> q.term(t -> t.field("tags").value(tag))));
         }
@@ -162,7 +163,7 @@ public class SearchService {
                 select d.id, d.name, d.name_zh, d.description, d.price_cents, d.tags, d.spice_level,
                        r.id as rid, r.slug, r.name as rname, r.name_zh as rname_zh, r.cuisine, r.accepting_orders
                 from dishes d join restaurants r on r.id = d.restaurant_id
-                where d.available
+                where d.available and d.archived_at is null and r.status = 'LIVE'
                   and (:q = '' or d.name ilike :like or d.name_zh like :like or r.name ilike :like
                        or similarity(d.name, :q) > 0.3)
                   and (cardinality(:tags::text[]) = 0 or d.tags @> :tags::text[])

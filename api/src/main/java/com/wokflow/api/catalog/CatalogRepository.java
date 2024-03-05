@@ -15,22 +15,29 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public class CatalogRepository {
-    public record Category(long id, String name, String nameZh, int position) {}
+    public record Category(long id, String name, String nameZh, int position, long version) {}
 
     static final String RESTAURANT_COLS = """
             id, slug, name, name_zh, description, cuisine, tags, neighborhood, address, delivery_fee_cents,
             min_order_cents, prep_minutes, commission_bps, opens_at, closes_at, open_24h, time_zone,
-            accepting_orders, version""";
+            accepting_orders, version, status""";
     static final String DISH_COLS = """
             id, restaurant_id, category_id, name, name_zh, description, price_cents, tags, spice_level, available,
-            daily_stock, stock_remaining, version""";
+            daily_stock, stock_remaining, version, archived_at is not null as archived""";
 
     private final JdbcClient db;
 
     public CatalogRepository(JdbcClient db) { this.db = db; }
 
+    /** Every restaurant in any onboarding state (staff and admin views). */
     public List<Restaurant> restaurants() {
         return db.sql("select " + RESTAURANT_COLS + " from restaurants order by name").query(CatalogRepository::restaurant).list();
+    }
+
+    /** The storefront: only restaurants that passed review and are not suspended. */
+    public List<Restaurant> liveRestaurants() {
+        return db.sql("select " + RESTAURANT_COLS + " from restaurants where status = 'LIVE' order by name")
+                .query(CatalogRepository::restaurant).list();
     }
 
     public Optional<Restaurant> restaurant(long id) {
@@ -44,13 +51,13 @@ public class CatalogRepository {
     }
 
     public List<Category> categories(long restaurantId) {
-        return db.sql("select id, name, name_zh, position from menu_categories where restaurant_id = ? order by position")
+        return db.sql("select id, name, name_zh, position, version from menu_categories where restaurant_id = ? and archived_at is null order by position, id")
                 .param(restaurantId)
-                .query((rs, n) -> new Category(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getInt(4))).list();
+                .query((rs, n) -> new Category(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getInt(4), rs.getLong(5))).list();
     }
 
     public List<Dish> dishes(long restaurantId) {
-        return db.sql("select " + DISH_COLS + " from dishes where restaurant_id = ? order by category_id, id")
+        return db.sql("select " + DISH_COLS + " from dishes where restaurant_id = ? and archived_at is null order by category_id, id")
                 .param(restaurantId).query(CatalogRepository::dish).list();
     }
 
@@ -72,10 +79,15 @@ public class CatalogRepository {
 
     /** Live stock for limited dishes; never cached. */
     public Map<Long, Integer> stock(long restaurantId) {
-        return db.sql("select id, stock_remaining from dishes where restaurant_id = ? and daily_stock is not null")
+        return db.sql("select id, stock_remaining from dishes where restaurant_id = ? and daily_stock is not null and archived_at is null")
                 .param(restaurantId)
                 .query((rs, n) -> Map.entry(rs.getLong(1), rs.getInt(2))).list().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public String statusNote(long restaurantId) {
+        return db.sql("select status_note from restaurants where id = ?").param(restaurantId).query(String.class)
+                .optional().orElse(null);
     }
 
     public long menuVersion(long restaurantId) {
@@ -133,14 +145,16 @@ public class CatalogRepository {
                 rs.getString("neighborhood"), rs.getString("address"), rs.getInt("delivery_fee_cents"),
                 rs.getInt("min_order_cents"), rs.getInt("prep_minutes"), rs.getInt("commission_bps"),
                 rs.getTime("opens_at").toLocalTime(), rs.getTime("closes_at").toLocalTime(), rs.getBoolean("open_24h"),
-                rs.getString("time_zone"), rs.getBoolean("accepting_orders"), rs.getLong("version"));
+                rs.getString("time_zone"), rs.getBoolean("accepting_orders"), rs.getLong("version"),
+                RestaurantStatus.valueOf(rs.getString("status")));
     }
 
     static Dish dish(ResultSet rs, int n) throws SQLException {
         return new Dish(rs.getLong("id"), rs.getLong("restaurant_id"), rs.getLong("category_id"), rs.getString("name"),
                 rs.getString("name_zh"), rs.getString("description"), rs.getInt("price_cents"),
                 strings(rs.getArray("tags")), rs.getInt("spice_level"), rs.getBoolean("available"),
-                (Integer) rs.getObject("daily_stock"), (Integer) rs.getObject("stock_remaining"), rs.getLong("version"));
+                (Integer) rs.getObject("daily_stock"), (Integer) rs.getObject("stock_remaining"), rs.getLong("version"),
+                rs.getBoolean("archived"));
     }
 
     static List<String> strings(Array a) throws SQLException {

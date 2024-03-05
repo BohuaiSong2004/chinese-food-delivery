@@ -29,11 +29,12 @@ public class AuthController {
 
     public record SignUpRequest(@NotBlank @Email @Size(max = 254) String email,
                                 @NotBlank @Size(min = 10, max = 128, message = "must be 10 to 128 characters") String password,
-                                @NotBlank @Size(max = 60) String name) {}
+                                @NotBlank @Size(max = 60) String name,
+                                @jakarta.validation.constraints.Pattern(regexp = "CUSTOMER|MERCHANT|RIDER") String accountType) {}
 
     public record SignInRequest(@NotBlank @Size(max = 254) String email, @NotBlank @Size(max = 128) String password) {}
 
-    public record UserView(long id, String email, String name, Role role, List<Long> restaurantIds) {}
+    public record UserView(long id, String email, String name, Role role, List<Long> restaurantIds, boolean pending) {}
 
     public record SessionView(String accessToken, Instant expiresAt, UserView user) {}
 
@@ -48,7 +49,8 @@ public class AuthController {
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
     SessionView signUp(@Valid @RequestBody SignUpRequest req, HttpServletRequest http, HttpServletResponse res) {
-        return respond(auth.signUp(req.email(), req.password(), req.name(), http.getRemoteAddr()), res);
+        Role type = req.accountType() == null ? Role.CUSTOMER : Role.valueOf(req.accountType());
+        return respond(auth.signUp(req.email(), req.password(), req.name(), http.getRemoteAddr(), type), res);
     }
 
     @PostMapping("/signin")
@@ -87,7 +89,7 @@ public class AuthController {
     @GetMapping("/me")
     Map<String, Object> me() {
         CurrentUser u = CurrentUser.require();
-        return Map.of("id", u.id(), "name", u.name(), "role", u.role(), "restaurantIds", u.restaurantIds());
+        return Map.of("id", u.id(), "name", u.name(), "role", u.role(), "restaurantIds", u.restaurantIds(), "pending", u.pending());
     }
 
     private SessionView respond(AuthService.Session s, HttpServletResponse res) {
@@ -99,7 +101,7 @@ public class AuthController {
         res.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
         var u = s.user();
         return new SessionView(s.access().value(), s.access().expiresAt(),
-                new UserView(u.id(), u.email(), u.displayName(), u.role(), s.restaurantIds()));
+                new UserView(u.id(), u.email(), u.displayName(), u.role(), s.restaurantIds(), !u.approved()));
     }
 
     private void clearCookie(HttpServletResponse res) {

@@ -40,7 +40,12 @@ public class MerchantController {
 
     public record PayoutRequest(@Positive @Max(100_000_000) long amountCents) {}
 
-    public record RestaurantSummary(long id, String slug, String name, String nameZh, boolean acceptingOrders) {}
+    public record RestaurantSummary(long id, String slug, String name, String nameZh, boolean acceptingOrders,
+                                    com.wokflow.api.catalog.RestaurantStatus status, String statusNote) {
+        static RestaurantSummary of(com.wokflow.api.catalog.Restaurant r, String note) {
+            return new RestaurantSummary(r.id(), r.slug(), r.name(), r.nameZh(), r.acceptingOrders(), r.status(), note);
+        }
+    }
 
     private final OrderService orders;
     private final CatalogRepository catalog;
@@ -66,7 +71,7 @@ public class MerchantController {
         CurrentUser u = CurrentUser.require();
         return catalog.restaurants().stream()
                 .filter(r -> u.is(com.wokflow.api.auth.Role.ADMIN) || u.restaurantIds().contains(r.id()))
-                .map(r -> new RestaurantSummary(r.id(), r.slug(), r.name(), r.nameZh(), r.acceptingOrders())).toList();
+                .map(r -> RestaurantSummary.of(r, catalog.statusNote(r.id()))).toList();
     }
 
     @GetMapping("/restaurants/{rid}/orders")
@@ -127,7 +132,7 @@ public class MerchantController {
             outbox.publish(Outbox.RESTAURANT_CHANGED, Long.toString(rid), Map.of("restaurantId", rid));
         });
         var r = catalog.restaurant(rid).orElseThrow();
-        return new RestaurantSummary(r.id(), r.slug(), r.name(), r.nameZh(), r.acceptingOrders());
+        return RestaurantSummary.of(r, catalog.statusNote(rid));
     }
 
     @GetMapping("/restaurants/{rid}/ledger")

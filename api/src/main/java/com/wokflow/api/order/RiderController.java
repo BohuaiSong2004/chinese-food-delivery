@@ -28,13 +28,17 @@ public class RiderController {
     }
 
     @GetMapping("/jobs")
-    List<OrderView> jobs() { return orders.openJobs(); }
+    List<OrderView> jobs() {
+        CurrentUser.require().requireApproved();
+        return orders.openJobs();
+    }
 
     @GetMapping("/orders")
     List<OrderView> mine() { return orders.riderOrders(CurrentUser.require()); }
 
     @GetMapping(path = "/jobs/events", produces = "text/event-stream")
     SseEmitter jobEvents(@AuthenticationPrincipal Jwt jwt) {
+        CurrentUser.from(jwt).requireApproved();
         return live.open("jobs", OrderController.lifetime(jwt), null);
     }
 
@@ -47,6 +51,8 @@ public class RiderController {
             case "deliver" -> OrderAction.DELIVER;
             default -> throw ApiException.notFound("Action");
         };
-        return orders.act(id, a, CurrentUser.require(), Versions.parse(ifMatch), null);
+        CurrentUser u = CurrentUser.require();
+        u.requireApproved();
+        return orders.act(id, a, u, Versions.parse(ifMatch), null);
     }
 }

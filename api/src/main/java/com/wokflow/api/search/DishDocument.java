@@ -26,4 +26,6 @@ public record DishDocument(
         @JsonProperty("available") boolean available,
         @JsonProperty("accepting_orders") boolean acceptingOrders,
         @JsonProperty("popularity") double popularity,
-        @JsonProperty("version") long version) {}
+        @JsonProperty("version") long version,
+        /** Restaurant LIVE and dish not archived: only listed documents are ever returned. */
+        @JsonProperty("listed") boolean listed) {}

@@ -111,18 +111,27 @@ public class DemoSeeder implements ApplicationRunner {
         }
         int position = 0;
         for (CategorySeed c : r.categories()) {
-            db.sql("insert into menu_categories (restaurant_id, name, name_zh, position) values (?, ?, ?, ?) on conflict do nothing")
-                    .params(rid, c.name(), c.nameZh(), position++).update();
-            long cid = db.sql("select id from menu_categories where restaurant_id = ? and name = ?").params(rid, c.name())
-                    .query(Long.class).single();
+            // Insert-only, and never resurrect something the merchant archived: skip any name that ever existed.
+            db.sql("""
+                    insert into menu_categories (restaurant_id, name, name_zh, position)
+                    select ?, ?, ?, ? where not exists (select 1 from menu_categories where restaurant_id = ? and name = ?)
+                    on conflict do nothing""")
+                    .params(rid, c.name(), c.nameZh(), position++, rid, c.name()).update();
+            Long cid = db.sql("select id from menu_categories where restaurant_id = ? and name = ? and archived_at is null")
+                    .params(rid, c.name()).query(Long.class).optional().orElse(null);
+            if (cid == null) {
+                continue; // archived by the merchant
+            }
             for (DishSeed d : c.dishes()) {
                 db.sql("""
                         insert into dishes (restaurant_id, category_id, name, name_zh, description, price_cents, tags,
                                             spice_level, daily_stock, stock_remaining, stock_day)
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) on conflict (restaurant_id, name) do nothing""")
+                        select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                        where not exists (select 1 from dishes where restaurant_id = ? and name = ?)
+                        on conflict do nothing""")
                         .params(rid, cid, d.name(), d.nameZh(), d.description(), d.priceCents(),
                                 d.tags().toArray(String[]::new), d.spice(), d.dailyStock(), d.dailyStock(),
-                                d.dailyStock() == null ? null : today)
+                                d.dailyStock() == null ? null : today, rid, d.name())
                         .update();
             }
         }
