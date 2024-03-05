@@ -8,18 +8,6 @@ import { money } from '../lib/format';
 import type { OrderView } from '../lib/types';
 import { Names } from '../components/bits';
 
-/** Busy (503) during a rush: wait and resend. Safe because the Idempotency-Key is the same each time. */
-async function withRetry<T>(call: () => Promise<T>, attempts = 4): Promise<T> {
-  for (let i = 1; ; i++) {
-    try {
-      return await call();
-    } catch (e) {
-      if (!(e instanceof ApiError) || e.status !== 503 || i >= attempts) throw e;
-      await new Promise((r) => setTimeout(r, 1000 * i));
-    }
-  }
-}
-
 export function Cart() {
   const { t, names } = useI18n();
   const { cart, subtotal, setQuantity, clear } = useCart();
@@ -52,7 +40,8 @@ export function Cart() {
     setBusy(true);
     setError(null);
     try {
-      const order = await withRetry(() => api<OrderView>('/api/orders', {
+      // api() resends on 503 with the same Idempotency-Key, so a busy moment cannot create two orders.
+      const order = await api<OrderView>('/api/orders', {
         method: 'POST',
         headers: { 'Idempotency-Key': key },
         body: {
@@ -61,7 +50,7 @@ export function Cart() {
           deliveryAddress: address,
           deliveryNotes: notes,
         },
-      }));
+      });
       clear();
       if (order.checkoutUrl) window.location.assign(order.checkoutUrl);
       else navigate(`/orders/${order.id}`);
