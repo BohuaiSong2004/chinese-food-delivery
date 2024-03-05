@@ -1,5 +1,6 @@
 import { createBrowserRouter, Link, Navigate, RouterProvider } from 'react-router';
 import { lazy, Suspense, type ReactNode } from 'react';
+import { retryImport } from './lib/retryImport';
 import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
 import { Search } from './pages/Search';
@@ -7,18 +8,18 @@ import { Restaurant } from './pages/Restaurant';
 import { SignIn } from './pages/Auth';
 
 // Pages most visitors never open are split out, so the browse path downloads less JavaScript.
-const Cart = lazy(() => import('./pages/Cart').then((m) => ({ default: m.Cart })));
-const Order = lazy(() => import('./pages/Order').then((m) => ({ default: m.Order })));
-const Orders = lazy(() => import('./pages/Orders').then((m) => ({ default: m.Orders })));
-const Kitchen = lazy(() => import('./pages/Kitchen').then((m) => ({ default: m.Kitchen })));
-const Rider = lazy(() => import('./pages/Rider').then((m) => ({ default: m.Rider })));
-const Account = lazy(() => import('./pages/Account').then((m) => ({ default: m.Account })));
-const Partner = lazy(() => import('./pages/Partner').then((m) => ({ default: m.Partner })));
-const Password = () => import('./pages/Password');
+const Cart = lazy(() => retryImport(() => import('./pages/Cart')).then((m) => ({ default: m.Cart })));
+const Order = lazy(() => retryImport(() => import('./pages/Order')).then((m) => ({ default: m.Order })));
+const Orders = lazy(() => retryImport(() => import('./pages/Orders')).then((m) => ({ default: m.Orders })));
+const Kitchen = lazy(() => retryImport(() => import('./pages/Kitchen')).then((m) => ({ default: m.Kitchen })));
+const Rider = lazy(() => retryImport(() => import('./pages/Rider')).then((m) => ({ default: m.Rider })));
+const Account = lazy(() => retryImport(() => import('./pages/Account')).then((m) => ({ default: m.Account })));
+const Partner = lazy(() => retryImport(() => import('./pages/Partner')).then((m) => ({ default: m.Partner })));
+const Password = () => retryImport(() => import('./pages/Password'));
 const ForgotPassword = lazy(() => Password().then((m) => ({ default: m.ForgotPassword })));
 const ResetPassword = lazy(() => Password().then((m) => ({ default: m.ResetPassword })));
 const ChangePassword = lazy(() => Password().then((m) => ({ default: m.ChangePassword })));
-const Admin = lazy(() => import('./pages/Admin').then((m) => ({ default: m.Admin })));
+const Admin = lazy(() => retryImport(() => import('./pages/Admin')).then((m) => ({ default: m.Admin })));
 const page = (el: ReactNode) => <Suspense fallback={<Loading />}>{el}</Suspense>;
 import { useAuth } from './lib/auth';
 import { useI18n } from './lib/i18n';
