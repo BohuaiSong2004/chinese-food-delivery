@@ -72,6 +72,12 @@ class MockPayIT {
     @LocalServerPort
     int port;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.jdbc.core.simple.JdbcClient db;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    WebhookSender sender;
+
     record Res(int status, JsonNode body, HttpResponse<String> raw) {}
 
     Res call(String method, String path, String json, String key, String auth) throws Exception {
@@ -172,5 +178,18 @@ class MockPayIT {
         var again = call("POST", "/v1/refunds", "{\"paymentIntent\":\"" + id + "\",\"amount\":300}", id + "-r0", "Bearer sk_it");
         assertThat(again.status()).isIn(200, 409);
         assertThat(call("GET", "/v1/payment_intents/" + id, null, null, "Bearer sk_it").body().get("refunded").asInt()).isEqualTo(900);
+    }
+
+    @Test
+    void oldFinishedDeliveriesArePurgedAndPendingOnesKept() {
+        db.sql("""
+                insert into webhook_deliveries (event_id, type, payload, attempts, delivered_at, created_at, next_attempt_at) values
+                  ('evt_old_done', 't', '{}', 1, now() - interval '40 days', now() - interval '40 days', now() + interval '1 day'),
+                  ('evt_old_dead', 't', '{}', 20, null, now() - interval '40 days', now() + interval '1 day'),
+                  ('evt_old_pending', 't', '{}', 3, null, now() - interval '40 days', now() + interval '1 day'),
+                  ('evt_new_done', 't', '{}', 1, now(), now(), now() + interval '1 day')""").update();
+        sender.purge();
+        assertThat(db.sql("select event_id from webhook_deliveries where event_id like 'evt_old_%' or event_id = 'evt_new_done' order by event_id")
+                .query(String.class).list()).containsExactly("evt_new_done", "evt_old_pending");
     }
 }

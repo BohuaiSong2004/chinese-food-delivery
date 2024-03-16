@@ -101,4 +101,17 @@ class WebhookSender {
                        next_attempt_at = now() + make_interval(secs => ?) where id = ?""")
                 .params(error.length() > 300 ? error.substring(0, 300) : error, delay, d.id()).update();
     }
+
+    /** Delivered (or abandoned) webhooks are kept 30 days for the dashboard, then removed. */
+    @Scheduled(cron = "0 17 4 * * *")
+    int purge() {
+        int n = db.sql("""
+                delete from webhook_deliveries
+                where created_at < now() - interval '30 days' and (delivered_at is not null or attempts >= ?)""")
+                .param(MAX_ATTEMPTS).update();
+        if (n > 0) {
+            log.info("Purged {} old webhook deliveries", n);
+        }
+        return n;
+    }
 }
