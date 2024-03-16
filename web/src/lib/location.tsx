@@ -87,4 +87,5 @@ export function useDeliverTo(): LocationApi {
   return v;
 }
 
-export const km = (m: number) => (m < 950 ? `${Math.max(100, Math.round(m / 100) * 100)} m` : `${(m / 1000).toFixed(1)} km`);
+// Math.round, not toFixed: (0.95).toFixed(1) is "0.9" because 0.95 is stored as 0.9499…
+export const km = (m: number) => (m < 950 ? `${Math.max(100, Math.round(m / 100) * 100)} m` : `${(Math.round(m / 100) / 10).toFixed(1)} km`);
