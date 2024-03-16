@@ -1,0 +1,100 @@
+{
+    "metrics": {
+        "http_req_duration": {
+            "med": 167.769973,
+            "p(95)": 369.602812,
+            "p(99)": 544.2702444000001
+        },
+        "http_req_connecting": {
+            "med": 0,
+            "p(95)": 0,
+            "p(99)": 0
+        },
+        "http_req_duration{expected_response:true}": {
+            "med": 167.769973,
+            "p(95)": 369.602812,
+            "p(99)": 544.2702444000001
+        },
+        "http_req_tls_handshaking": {
+            "med": 0,
+            "p(95)": 0,
+            "p(99)": 0
+        },
+        "checks": {
+            "passes": 3161,
+            "fails": 0,
+            "value": 1
+        },
+        "iteration_duration": {
+            "med": 167.975817,
+            "p(95)": 371.628281,
+            "p(99)": 544.4208866000001
+        },
+        "http_req_receiving": {
+            "med": 0.089871,
+            "p(95)": 0.337327,
+            "p(99)": 2.499687200000003
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 3161,
+            "value": 0
+        },
+        "http_req_sending": {
+            "med": 0.009396,
+            "p(95)": 0.041374,
+            "p(99)": 0.1098514000000002
+        },
+        "vus": {
+            "value": 20,
+            "min": 20,
+            "max": 20
+        },
+        "http_reqs": {
+            "count": 3161,
+            "rate": 105.16844228400078
+        },
+        "http_req_blocked": {
+            "med": 0.0026,
+            "p(95)": 0.005177,
+            "p(99)": 0.03906160000000016
+        },
+        "iterations": {
+            "count": 3161,
+            "rate": 105.16844228400078
+        },
+        "data_received": {
+            "count": 14825332,
+            "rate": 493248.04580295784
+        },
+        "http_req_waiting": {
+            "med": 167.600895,
+            "p(95)": 367.793761,
+            "p(99)": 540.8501772000004
+        },
+        "data_sent": {
+            "count": 337777,
+            "rate": 11238.051543613708
+        },
+        "vus_max": {
+            "value": 20,
+            "min": 20,
+            "max": 20
+        }
+    },
+    "root_group": {
+        "checks": {
+            "ok": {
+                "passes": 3161,
+                "fails": 0,
+                "name": "ok",
+                "path": "::ok",
+                "id": "2385b52f13b6c5244d846734f1757fa3"
+            }
+        },
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {}
+    }
+}
