@@ -17,8 +17,13 @@ public record AppProperties(
         Images images,
         Delivery delivery) {
 
+    /**
+     * previousPublicKeys / previousPublicKeysFile: PEM "PUBLIC KEY" blocks of retired signing keys,
+     * still accepted (and published in the JWKS) so tokens signed before a rotation keep working
+     * until they expire.
+     */
     public record Jwt(String issuer, String privateKey, String privateKeyFile, boolean generateIfMissing, Duration accessTtl,
-                      Duration refreshTtl, boolean refreshCookieSecure) {}
+                      Duration refreshTtl, boolean refreshCookieSecure, String previousPublicKeys, String previousPublicKeysFile) {}
 
     public record Payments(String baseUrl, String secretKey, String webhookSecret,
                            Duration webhookTolerance, Duration paymentWindow) {}

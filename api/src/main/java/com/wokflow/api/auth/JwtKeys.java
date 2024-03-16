@@ -18,7 +18,9 @@ import java.security.interfaces.ECPublicKey;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -40,6 +42,7 @@ public class JwtKeys {
     private final ECPublicKey publicKey;
     private final ECPrivateKey privateKey;
     private final String keyId;
+    private final List<ECPublicKey> previous;
 
     public JwtKeys(AppProperties props) throws GeneralSecurityException, IOException {
         String file = props.jwt().privateKeyFile();
@@ -59,8 +62,41 @@ public class JwtKeys {
         }
         this.publicKey = (ECPublicKey) pair.getPublic();
         this.privateKey = (ECPrivateKey) pair.getPrivate();
-        byte[] digest = MessageDigest.getInstance("SHA-256").digest(publicKey.getEncoded());
-        this.keyId = Base64.getUrlEncoder().withoutPadding().encodeToString(digest).substring(0, 16);
+        this.keyId = kid(publicKey);
+        String prevFile = props.jwt().previousPublicKeysFile();
+        String prevText = props.jwt().previousPublicKeys();
+        StringBuilder pems = new StringBuilder(prevText == null ? "" : prevText);
+        if (prevFile != null && !prevFile.isBlank()) {
+            pems.append('\n').append(Files.readString(Path.of(prevFile), StandardCharsets.US_ASCII));
+        }
+        this.previous = publicKeys(pems.toString()).stream().filter(k -> !k.equals(publicKey)).toList();
+        if (!previous.isEmpty()) {
+            log.info("Signing with key {}; also accepting {} retired key(s): {}", keyId, previous.size(),
+                    previous.stream().map(JwtKeys::kid).toList());
+        }
+    }
+
+    /** Key id: the first 16 base64url characters of the SHA-256 of the public key's DER encoding. */
+    static String kid(ECPublicKey key) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(key.getEncoded());
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest).substring(0, 16);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Every "PUBLIC KEY" block in the text. */
+    static List<ECPublicKey> publicKeys(String text) throws GeneralSecurityException {
+        List<ECPublicKey> out = new ArrayList<>();
+        Matcher m = PEM.matcher(text);
+        KeyFactory kf = KeyFactory.getInstance("EC");
+        while (m.find()) {
+            if (m.group(1).equals("PUBLIC KEY")) {
+                out.add((ECPublicKey) kf.generatePublic(new X509EncodedKeySpec(Base64.getMimeDecoder().decode(m.group(2).trim()))));
+            }
+        }
+        return out;
     }
 
     /**
@@ -125,7 +161,13 @@ public class JwtKeys {
         return new ECKey.Builder(Curve.P_256, publicKey).privateKey(privateKey).keyID(keyId).build();
     }
 
+    /** The signing key first, then retired keys; tokens name theirs in the "kid" header. */
     public JWKSet publicJwks() {
-        return new JWKSet(new ECKey.Builder(Curve.P_256, publicKey).keyID(keyId).build());
+        List<com.nimbusds.jose.jwk.JWK> all = new ArrayList<>();
+        all.add(new ECKey.Builder(Curve.P_256, publicKey).keyID(keyId).build());
+        for (ECPublicKey k : previous) {
+            all.add(new ECKey.Builder(Curve.P_256, k).keyID(kid(k)).build());
+        }
+        return new JWKSet(all);
     }
 }
