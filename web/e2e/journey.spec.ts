@@ -50,13 +50,13 @@ test('a stale kitchen screen cannot act twice', async ({ page, browser }) => {
 
   const a = await asRole(browser, 'merchant@example.com');
   const b = await asRole(browser, 'merchant@example.com');
+  // b's live stream is blocked before its board loads, so its screen stays as first rendered
+  await b.route('**/events', (r) => r.abort());
   for (const p of [a, b]) {
     await p.goto('/kitchen');
     await p.getByLabel('Restaurant').selectOption({ label: 'Midnight Congee' });
     await expect(p.locator(`[data-order="${id}"]`).getByRole('button', { name: 'Reject' })).toBeVisible();
   }
-  // b goes offline-ish: block its live stream so its screen stays stale
-  await b.route('**/events', (r) => r.abort());
   await a.locator(`[data-order="${id}"]`).getByRole('button', { name: 'Reject' }).click();
   await a.getByLabel('Reason (shown to the customer)').fill('Out of rockfish today');
   await a.getByRole('button', { name: 'Reject and refund' }).click();
