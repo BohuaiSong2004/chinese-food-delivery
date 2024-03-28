@@ -132,7 +132,11 @@ class LiveIT extends IntegrationTest {
         Stream order = open("/api/orders/" + id + "/events", customer);
         Stream board = open("/api/merchant/restaurants/" + k.id() + "/events", merchant);
         await(() -> order.events().stream().anyMatch(e -> e.startsWith("snapshot:")));
-        assertThat(order.events().getFirst()).isEqualTo("snapshot:PENDING_PAYMENT@1");
+        assertThat(order.events()).contains("snapshot:PENDING_PAYMENT@1");
+        // the order's first event may also arrive while the stream is opening (registered before the
+        // snapshot is sent, so nothing can fall in between): at most a copy of the same state, never another
+        assertThat(order.events().stream().takeWhile(e -> !e.startsWith("snapshot:")))
+                .allMatch(e -> e.equals("status:PENDING_PAYMENT@1"));
 
         pay(id);
         http.post("/api/merchant/orders/" + id + "/accept", merchant, null);

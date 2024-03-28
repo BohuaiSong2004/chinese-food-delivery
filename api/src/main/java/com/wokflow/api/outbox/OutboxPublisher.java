@@ -75,6 +75,7 @@ public class OutboxPublisher implements SmartLifecycle {
                 handlers.computeIfAbsent(t, k -> new ArrayList<>()).add(h);
             }
         }
+        this.meters = meters;
         this.published = meters.counter("wokflow.outbox.published");
         this.failures = meters.counter("wokflow.outbox.failures");
         Gauge.builder("wokflow.outbox.lag.seconds", this, OutboxPublisher::lagSeconds).register(meters);
@@ -143,8 +144,10 @@ public class OutboxPublisher implements SmartLifecycle {
                     }
                     pending = false;
                 }
-                while (running.get() && drainOnce() == BATCH) {
-                    // keep going while full batches come back
+                // Keep going while a pass did any work: publishing an event can unblock the next event of the
+                // same aggregate (set aside because it waited behind it), and nothing else would wake us for that.
+                while (running.get() && drainOnce() > 0) {
+                    // next pass
                 }
             } catch (InterruptedException e) {
                 return;
@@ -167,12 +170,19 @@ public class OutboxPublisher implements SmartLifecycle {
                     .param(BATCH)
                     .query((rs, i) -> new Row(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getInt(5)))
                     .list();
+            Map<String, Long> cutoffs = outsideCutoffs(rows);
+            int processed = 0;
             List<Long> done = new ArrayList<>();
             // A topic whose handler just failed (its store is down or hanging) is not tried again in this
             // batch: without this, one frozen dependency made every queued event wait out its own timeout,
             // and events for healthy stores waited behind them.
             Map<String, String> failedTopics = new HashMap<>();
             for (Row r : rows) {
+                Long cutoff = cutoffs.get(r.topic() + "/" + r.aggregateId());
+                if (cutoff != null && r.id() > cutoff) {
+                    continue; // left untouched; claimable again once the earlier event is out
+                }
+                processed++;
                 String earlier = failedTopics.get(r.topic());
                 if (earlier != null) {
                     hold(r, "skipped: " + earlier);
@@ -187,7 +197,9 @@ public class OutboxPublisher implements SmartLifecycle {
                 try {
                     JsonNode payload = json.readTree(r.payload());
                     for (OutboxHandler h : handlers.getOrDefault(r.topic(), List.of())) {
+                        long t0 = System.nanoTime();
                         h.handle(r.topic(), r.aggregateId(), payload);
+                        handleTimer(h).record(System.nanoTime() - t0, java.util.concurrent.TimeUnit.NANOSECONDS);
                     }
                     done.add(r.id());
                 } catch (Exception e) {
@@ -204,12 +216,58 @@ public class OutboxPublisher implements SmartLifecycle {
                 db.sql("update outbox set published_at = now() where id = any(?)").param(done.toArray(Long[]::new)).update();
                 published.increment(done.size());
             }
-            return rows.size();
+            return processed;
         });
         return n == null ? 0 : n;
     }
 
+    /**
+     * Per-aggregate order. Events of one order (or dish) in this batch are handled in id order, but
+     * only up to the first pending event of that aggregate that is not in this batch: one another
+     * replica is publishing (or has set aside) right now, or one waiting to be retried. Everything
+     * after it waits. Without this, two replicas publishing their own commits at the same moment put
+     * an order's READY before its ACCEPTED in the live stream.
+     *
+     * @return for each aggregate in the batch, the id of the first pending event outside the batch
+     */
+    private Map<String, Long> outsideCutoffs(List<Row> rows) {
+        Map<String, Row> first = new java.util.LinkedHashMap<>();
+        for (Row r : rows) {
+            first.putIfAbsent(r.topic() + "/" + r.aggregateId(), r);
+        }
+        if (first.isEmpty()) {
+            return Map.of();
+        }
+        String[] topics = first.values().stream().map(Row::topic).toArray(String[]::new);
+        String[] aggs = first.values().stream().map(Row::aggregateId).toArray(String[]::new);
+        Long[] mine = rows.stream().map(Row::id).toArray(Long[]::new);
+        Map<String, Long> out = new HashMap<>();
+        db.sql("""
+                select t.topic || '/' || t.agg,
+                       (select min(e.id) from outbox e where e.topic = t.topic and e.aggregate_id = t.agg
+                          and e.published_at is null and e.id <> all(?::bigint[]))
+                from unnest(?::text[], ?::text[]) as t(topic, agg)""")
+                .params(mine, topics, aggs)
+                .query((rs, i) -> {
+                    long cutoff = rs.getLong(2);
+                    if (!rs.wasNull()) {
+                        out.put(rs.getString(1), cutoff);
+                    }
+                    return null;
+                }).list();
+        return out;
+    }
+
     /** Not attempted (its store is known to be down): try again shortly, without growing the backoff. */
+    private final Map<Class<?>, io.micrometer.core.instrument.Timer> handleTimers = new java.util.concurrent.ConcurrentHashMap<>();
+    private MeterRegistry meters;
+
+    /** Time spent in each handler, so a slow store shows up as the reason the outbox lags. */
+    private io.micrometer.core.instrument.Timer handleTimer(OutboxHandler h) {
+        return handleTimers.computeIfAbsent(h.getClass(), c -> io.micrometer.core.instrument.Timer.builder("wokflow.outbox.handle")
+                .tag("handler", c.getSimpleName().replaceAll("\\$\\$.*", "")).publishPercentiles(0.5, 0.95).register(meters));
+    }
+
     private void hold(Row r, String reason) {
         db.sql("update outbox set last_error = ?, next_attempt_at = now() + interval '1 second' where id = ?")
                 .params(truncate(reason), r.id()).update();
