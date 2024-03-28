@@ -49,3 +49,89 @@ jobs:
         with:
           name: surefire-reports
           path: '**/target/surefire-reports'
+
+  frontend:
+    name: Frontend (lint, types, unit tests, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    name: E2E on the Docker stack (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build and start the stack (two API replicas)
+        run: docker compose up -d --build --wait --wait-timeout 300
+      - run: npm ci --no-audit --no-fund
+        working-directory: web
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+        working-directory: web
+      - name: Playwright
+        working-directory: web
+        env:
+          E2E_BASE_URL: http://localhost:8000
+          E2E_ALL_BROWSERS: '1'
+        run: |
+          if [ "${{ matrix.browser }}" = chromium ]; then
+            npx playwright test --project=chromium --project=mobile
+          else
+            npx playwright test --project=${{ matrix.browser }}
+          fi
+      - name: Data survives a restart of every container
+        if: matrix.browser == 'chromium'
+        run: |
+          before=$(docker compose exec -T postgres psql -U wokflow -tAc "select count(*) from orders")
+          docker compose restart
+          docker compose up -d --wait --wait-timeout 300
+          after=$(docker compose exec -T postgres psql -U wokflow -tAc "select count(*) from orders")
+          echo "orders before=$before after=$after"
+          test "$before" -gt 0 && test "$before" = "$after"
+          curl -fs http://localhost:8000/api/restaurants/midnight-congee | grep -q '"popular":\[{'   # hot menu came back
+          curl -fs 'http://localhost:8000/api/search?q=mpdf' | grep -q '麻婆豆腐'                      # index came back
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 300
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-${{ matrix.browser }}
+          path: web/playwright-report
+
+  docker:
+    name: Container images build (linux/amd64 + linux/arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - run: docker run --privileged --rm tonistiigi/binfmt --install arm64
+      - name: Build api, mockpay and web for both architectures
+        run: |
+          docker buildx build --platform linux/amd64,linux/arm64 -f api/Dockerfile .
+          docker buildx build --platform linux/amd64,linux/arm64 -f mockpay/Dockerfile .
+          docker buildx build --platform linux/amd64,linux/arm64 web
