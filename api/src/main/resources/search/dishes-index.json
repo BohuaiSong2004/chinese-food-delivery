@@ -5,60 +5,204 @@
     "max_ngram_diff": 9,
     "analysis": {
       "normalizer": {
-        "folded": { "type": "custom", "filter": ["lowercase", "asciifolding"] }
+        "folded": {
+          "type": "custom",
+          "filter": [
+            "lowercase",
+            "asciifolding"
+          ]
+        }
       },
       "tokenizer": {
-        "grams_3_12": { "type": "ngram", "min_gram": 3, "max_gram": 12, "token_chars": ["letter", "digit"] }
+        "grams_3_12": {
+          "type": "ngram",
+          "min_gram": 3,
+          "max_gram": 12,
+          "token_chars": [
+            "letter",
+            "digit"
+          ]
+        },
+        "grams_2_8": {
+          "type": "ngram",
+          "min_gram": 2,
+          "max_gram": 8,
+          "token_chars": [
+            "letter",
+            "digit"
+          ]
+        }
       },
       "filter": {
-        "edge_2_15": { "type": "edge_ngram", "min_gram": 2, "max_gram": 15 }
+        "edge_2_15": {
+          "type": "edge_ngram",
+          "min_gram": 2,
+          "max_gram": 15
+        }
       },
       "analyzer": {
-        "en_folded": { "type": "custom", "tokenizer": "standard", "filter": ["lowercase", "asciifolding"] },
-        "en_stem": { "type": "custom", "tokenizer": "standard", "filter": ["lowercase", "asciifolding", "porter_stem"] },
-        "prefix_index": { "type": "custom", "tokenizer": "standard", "filter": ["lowercase", "asciifolding", "edge_2_15"] },
-        "zh_bigram": { "type": "cjk" },
-        "zh_unigram": { "type": "standard" },
-        "grams_index": { "type": "custom", "tokenizer": "grams_3_12", "filter": ["lowercase"] },
-        "whole_lower": { "type": "custom", "tokenizer": "keyword", "filter": ["lowercase"] }
+        "en_folded": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": [
+            "lowercase",
+            "asciifolding"
+          ]
+        },
+        "en_stem": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": [
+            "lowercase",
+            "asciifolding",
+            "porter_stem"
+          ]
+        },
+        "prefix_index": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": [
+            "lowercase",
+            "asciifolding",
+            "edge_2_15"
+          ]
+        },
+        "zh_bigram": {
+          "type": "cjk"
+        },
+        "zh_unigram": {
+          "type": "standard"
+        },
+        "grams_index": {
+          "type": "custom",
+          "tokenizer": "grams_3_12",
+          "filter": [
+            "lowercase"
+          ]
+        },
+        "whole_lower": {
+          "type": "custom",
+          "tokenizer": "keyword",
+          "filter": [
+            "lowercase"
+          ]
+        },
+        "initials_grams": {
+          "type": "custom",
+          "tokenizer": "grams_2_8",
+          "filter": [
+            "lowercase"
+          ]
+        }
       }
     }
   },
   "mappings": {
     "dynamic": "strict",
     "properties": {
-      "dish_id": { "type": "long" },
-      "restaurant_id": { "type": "long" },
-      "restaurant_slug": { "type": "keyword" },
-      "restaurant_name": { "type": "text", "analyzer": "en_folded" },
-      "restaurant_name_zh": { "type": "text", "analyzer": "zh_bigram" },
-      "cuisine": { "type": "keyword" },
-      "neighborhood": { "type": "keyword" },
+      "dish_id": {
+        "type": "long"
+      },
+      "restaurant_id": {
+        "type": "long"
+      },
+      "restaurant_slug": {
+        "type": "keyword"
+      },
+      "restaurant_name": {
+        "type": "text",
+        "analyzer": "en_folded"
+      },
+      "restaurant_name_zh": {
+        "type": "text",
+        "analyzer": "zh_bigram"
+      },
+      "cuisine": {
+        "type": "keyword"
+      },
+      "neighborhood": {
+        "type": "keyword"
+      },
       "name": {
-        "type": "text", "analyzer": "en_folded",
+        "type": "text",
+        "analyzer": "en_folded",
         "fields": {
-          "stem": { "type": "text", "analyzer": "en_stem" },
-          "prefix": { "type": "text", "analyzer": "prefix_index", "search_analyzer": "en_folded" }
+          "stem": {
+            "type": "text",
+            "analyzer": "en_stem"
+          },
+          "prefix": {
+            "type": "text",
+            "analyzer": "prefix_index",
+            "search_analyzer": "en_folded"
+          }
         }
       },
       "name_zh": {
-        "type": "text", "analyzer": "zh_bigram",
-        "fields": { "uni": { "type": "text", "analyzer": "zh_unigram" } }
+        "type": "text",
+        "analyzer": "zh_bigram",
+        "fields": {
+          "uni": {
+            "type": "text",
+            "analyzer": "zh_unigram"
+          }
+        }
       },
-      "pinyin": { "type": "text", "analyzer": "en_folded" },
+      "pinyin": {
+        "type": "text",
+        "analyzer": "en_folded"
+      },
       "pinyin_joined": {
-        "type": "keyword", "normalizer": "folded",
-        "fields": { "grams": { "type": "text", "analyzer": "grams_index", "search_analyzer": "whole_lower" } }
+        "type": "keyword",
+        "normalizer": "folded",
+        "fields": {
+          "grams": {
+            "type": "text",
+            "analyzer": "grams_index",
+            "search_analyzer": "whole_lower"
+          }
+        }
       },
-      "pinyin_initials": { "type": "keyword", "normalizer": "folded" },
-      "description": { "type": "text", "analyzer": "en_stem" },
-      "tags": { "type": "keyword" },
-      "spice_level": { "type": "integer" },
-      "price_cents": { "type": "integer" },
-      "available": { "type": "boolean" },
-      "accepting_orders": { "type": "boolean" },
-      "popularity": { "type": "float" },
-      "version": { "type": "long" }
+      "pinyin_initials": {
+        "type": "keyword",
+        "normalizer": "folded",
+        "fields": {
+          "grams": {
+            "type": "text",
+            "analyzer": "initials_grams",
+            "search_analyzer": "whole_lower"
+          }
+        }
+      },
+      "description": {
+        "type": "text",
+        "analyzer": "en_stem"
+      },
+      "tags": {
+        "type": "keyword"
+      },
+      "spice_level": {
+        "type": "integer"
+      },
+      "price_cents": {
+        "type": "integer"
+      },
+      "available": {
+        "type": "boolean"
+      },
+      "accepting_orders": {
+        "type": "boolean"
+      },
+      "popularity": {
+        "type": "float"
+      },
+      "version": {
+        "type": "long"
+      },
+      "name_joined": {
+        "type": "keyword",
+        "normalizer": "folded"
+      }
     }
   }
 }

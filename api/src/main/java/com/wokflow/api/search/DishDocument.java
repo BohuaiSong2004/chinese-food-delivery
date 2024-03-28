@@ -15,6 +15,7 @@ public record DishDocument(
         @JsonProperty("neighborhood") String neighborhood,
         @JsonProperty("name") String name,
         @JsonProperty("name_zh") String nameZh,
+        @JsonProperty("name_joined") String nameJoined,
         @JsonProperty("pinyin") String pinyin,
         @JsonProperty("pinyin_joined") String pinyinJoined,
         @JsonProperty("pinyin_initials") String pinyinInitials,
