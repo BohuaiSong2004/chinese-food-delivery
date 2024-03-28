@@ -65,11 +65,13 @@ public class AuthService {
     public Session signIn(String email, String password, String clientIp) {
         String normalized = normalize(email);
         limiter.check("signin-ip", clientIp, 60, Duration.ofMinutes(10));
-        limiter.check("signin-email", normalized, 10, Duration.ofMinutes(10));
+        // Per account, only wrong passwords count: this stops guessing without locking out someone who signs in often.
+        limiter.peek("signin-fail", normalized, 10, Duration.ofMinutes(10));
         var user = users.findByEmail(normalized);
         // Hash even when the account does not exist so response time does not reveal which emails are registered.
         boolean ok = hasher.matches(password, user.map(UserRepository.User::passwordHash).orElse(dummyHash));
         if (user.isEmpty() || !ok) {
+            limiter.record("signin-fail", normalized, 10, Duration.ofMinutes(10));
             throw new ApiException(HttpStatus.UNAUTHORIZED, "invalid_credentials", "Email or password is incorrect");
         }
         return start(user.get());

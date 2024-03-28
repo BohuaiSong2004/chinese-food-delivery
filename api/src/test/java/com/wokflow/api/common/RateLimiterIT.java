@@ -62,6 +62,19 @@ class RateLimiterIT extends IntegrationTest {
     }
 
     @Test
+    void peekDoesNotCountOnlyRecordDoes() {
+        RateLimiter limiter = enabled();
+        String who = unique("acct-");
+        for (int i = 0; i < 20; i++) {
+            limiter.peek("f", who, 3, Duration.ofMinutes(10)); // successful sign-ins: never limited
+        }
+        for (int i = 0; i < 3; i++) {
+            limiter.record("f", who, 3, Duration.ofMinutes(10)); // wrong passwords
+        }
+        assertThatThrownBy(() -> limiter.peek("f", who, 3, Duration.ofMinutes(10))).isInstanceOf(RetryableApiException.class);
+    }
+
+    @Test
     void disabledLimiterNeverRefuses() {
         var off = new RateLimiter(redis, clock, new AppProperties(null, null, null, null, null, new AppProperties.RateLimit(false), null, null));
         for (int i = 0; i < 20; i++) {

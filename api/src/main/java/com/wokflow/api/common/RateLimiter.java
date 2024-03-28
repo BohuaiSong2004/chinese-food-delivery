@@ -30,6 +30,9 @@ public class RateLimiter {
             if estimate >= limit then
               return {0, math.floor(estimate)}
             end
+            if ARGV[4] == 'peek' then
+              return {1, math.floor(estimate)}
+            end
             cur = redis.call('INCR', KEYS[1])
             if cur == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[3]) end
             return {1, math.floor(cur + prev * weight)}
@@ -45,8 +48,26 @@ public class RateLimiter {
         this.enabled = props.rateLimit().enabled();
     }
 
-    /** Throws 429 with Retry-After when {@code subject} exceeded {@code limit} per {@code window}. */
+    /** Counts this attempt; throws 429 with Retry-After when {@code subject} exceeded {@code limit} per {@code window}. */
     public void check(String name, String subject, int limit, Duration window) {
+        run(name, subject, limit, window, "count");
+    }
+
+    /** Throws 429 if already over the limit, without counting this attempt (pair with {@link #record}). */
+    public void peek(String name, String subject, int limit, Duration window) {
+        run(name, subject, limit, window, "peek");
+    }
+
+    /** Counts an attempt that turned out to matter (e.g. a wrong password). */
+    public void record(String name, String subject, int limit, Duration window) {
+        try {
+            run(name, subject, Integer.MAX_VALUE, window, "count");
+        } catch (RetryableApiException ignored) {
+            // cannot happen with an unbounded limit
+        }
+    }
+
+    private void run(String name, String subject, int limit, Duration window, String mode) {
         if (!enabled) {
             return;
         }
@@ -58,7 +79,7 @@ public class RateLimiter {
         List<?> res;
         try {
             res = redis.execute(SCRIPT, List.of(base + slot, base + (slot - 1)),
-                    Integer.toString(limit), Double.toString(1.0 - elapsed), Long.toString(size * 2));
+                    Integer.toString(limit), Double.toString(1.0 - elapsed), Long.toString(size * 2), mode);
         } catch (RuntimeException e) {
             log.warn("Rate limiter unavailable, allowing request: {}", e.toString());
             return;
