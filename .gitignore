@@ -22,3 +22,4 @@ loadtest/results/raw/
 infra/.terraform/
 infra/*.tfstate*
 infra/terraform.tfvars
+api/data/

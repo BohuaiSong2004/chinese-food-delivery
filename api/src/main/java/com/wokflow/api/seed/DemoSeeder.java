@@ -62,6 +62,18 @@ public class DemoSeeder implements ApplicationRunner {
         this.clock = clock;
     }
 
+    /** Slugs of the bundled demo restaurants (generated illustrations are only drawn for these). */
+    public static java.util.List<String> demoSlugs() {
+        try (InputStream in = new ClassPathResource("seed/demo-restaurants.json").getInputStream()) {
+            var root = tools.jackson.databind.json.JsonMapper.builder().build().readTree(in);
+            java.util.List<String> out = new java.util.ArrayList<>();
+            root.get("restaurants").forEach(r -> out.add(r.get("slug").asText()));
+            return out;
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     @Override
     public void run(ApplicationArguments args) throws Exception {
         if (!props.seed().demo()) {

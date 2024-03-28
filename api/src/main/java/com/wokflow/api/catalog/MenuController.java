@@ -27,8 +27,58 @@ public class MenuController {
     public record Order(@NotNull @Size(max = 100) List<@NotNull Long> ids) {}
 
     private final MenuEditor editor;
+    private final com.wokflow.api.images.ImageService images;
+    private final com.wokflow.api.common.RateLimiter limiter;
+    private final com.wokflow.api.common.Bulkhead processing;
 
-    public MenuController(MenuEditor editor) { this.editor = editor; }
+    public MenuController(MenuEditor editor, com.wokflow.api.images.ImageService images,
+                          com.wokflow.api.common.RateLimiter limiter, io.micrometer.core.instrument.MeterRegistry meters) {
+        this.editor = editor;
+        this.images = images;
+        this.limiter = limiter;
+        // Decoding and resizing a 12-megapixel photo is CPU-heavy: two at a time per replica, so a
+        // burst of uploads queues instead of slowing every order placement on the same cores.
+        this.processing = new com.wokflow.api.common.Bulkhead("image-processing", 2, java.time.Duration.ofSeconds(20), meters);
+    }
+
+    private String process(CurrentUser u, org.springframework.web.multipart.MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw com.wokflow.api.common.ApiException.badRequest("file_required", "Choose a photo to upload");
+        }
+        limiter.check("image-upload", Long.toString(u.id()), 60, java.time.Duration.ofHours(1));
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (java.io.IOException e) {
+            throw com.wokflow.api.common.ApiException.badRequest("upload_failed", "The upload did not complete");
+        }
+        return processing.run(() -> images.storeUpload("d", bytes));
+    }
+
+    @PostMapping(path = "/dishes/{id}/image", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    Dish uploadDishImage(@PathVariable long id, @org.springframework.web.bind.annotation.RequestParam("file")
+                         org.springframework.web.multipart.MultipartFile file) {
+        CurrentUser u = CurrentUser.require();
+        com.wokflow.api.catalog.Dish d = editor.requireOwnDish(u, id); // check access before spending CPU
+        return editor.setDishImage(u, d.id(), process(u, file));
+    }
+
+    @DeleteMapping("/dishes/{id}/image")
+    Dish removeDishImage(@PathVariable long id) { return editor.setDishImage(CurrentUser.require(), id, null); }
+
+    @PostMapping(path = "/restaurants/{rid}/image", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    java.util.Map<String, String> uploadCover(@PathVariable long rid, @org.springframework.web.bind.annotation.RequestParam("file")
+                                              org.springframework.web.multipart.MultipartFile file) {
+        CurrentUser u = CurrentUser.require();
+        u.requireStaffOf(rid);
+        String key = process(u, file);
+        editor.setRestaurantImage(u, rid, key);
+        return java.util.Map.of("image", images.url(key));
+    }
+
+    @DeleteMapping("/restaurants/{rid}/image")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void removeCover(@PathVariable long rid) { editor.setRestaurantImage(CurrentUser.require(), rid, null); }
 
     @PostMapping("/restaurants/{rid}/categories")
     @ResponseStatus(HttpStatus.CREATED)

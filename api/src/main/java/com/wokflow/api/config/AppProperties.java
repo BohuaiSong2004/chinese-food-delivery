@@ -13,7 +13,8 @@ public record AppProperties(
         RateLimit rateLimit,
         Seed seed,
         Outbox outbox,
-        Orders orders) {
+        Orders orders,
+        Images images) {
 
     public record Jwt(String issuer, String privateKey, String privateKeyFile, boolean generateIfMissing, Duration accessTtl,
                       Duration refreshTtl, boolean refreshCookieSecure) {}
@@ -33,4 +34,8 @@ public record AppProperties(
 
     /** Placement transactions allowed at once per replica, and how long a request may queue for one. */
     public record Orders(int placementConcurrency, Duration placementWait) {}
+
+    /** store = local (a directory, e.g. a compose volume) or s3; publicBase is what image URLs start with. */
+    public record Images(String store, String dir, String bucket, String prefix, String region, String endpoint,
+                         String publicBase, boolean generateDemo) {}
 }

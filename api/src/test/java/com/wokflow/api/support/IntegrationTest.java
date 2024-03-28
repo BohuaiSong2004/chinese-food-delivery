@@ -32,9 +32,20 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  */
 @SpringBootTest(classes = {WokflowApiApplication.class, IntegrationTest.TestBeans.class},
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"wokflow.rate-limit.enabled=false", "spring.main.allow-bean-definition-overriding=true"})
+        properties = {"wokflow.rate-limit.enabled=false", "spring.main.allow-bean-definition-overriding=true",
+                "wokflow.images.generate-demo=false"})
 public abstract class IntegrationTest {
     public static final String WEBHOOK_SECRET = "whsec_test";
+    static final java.nio.file.Path IMAGE_DIR = tempDir();
+
+    private static java.nio.file.Path tempDir() {
+        try {
+            return java.nio.file.Files.createTempDirectory("wokflow-images");
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.7-alpine");
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:8.8.4-alpine").withExposedPorts(6379);
     static final GenericContainer<?> ES = new GenericContainer<>("elasticsearch:9.5.5")
@@ -60,6 +71,7 @@ public abstract class IntegrationTest {
         r.add("spring.elasticsearch.uris", () -> "http://" + ES.getHost() + ":" + ES.getMappedPort(9200));
         r.add("wokflow.payments.webhook-secret", () -> WEBHOOK_SECRET);
         r.add("spring.datasource.hikari.maximum-pool-size", () -> 30);
+        r.add("wokflow.images.dir", () -> IMAGE_DIR.toString());
     }
 
     @TestConfiguration

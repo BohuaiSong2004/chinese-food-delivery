@@ -10,7 +10,7 @@ COPY api/src api/src
 RUN mvn -B -ntp -q -pl api -am package -DskipTests
 
 FROM eclipse-temurin:21-jre-alpine
-RUN addgroup -S app && adduser -S -G app app && mkdir -p /keys && chown app:app /keys
+RUN addgroup -S app && adduser -S -G app app && mkdir -p /keys /data/images && chown -R app:app /keys /data
 WORKDIR /app
 COPY --from=build /src/api/target/wokflow-api.jar app.jar
 USER app

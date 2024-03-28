@@ -34,7 +34,8 @@ public class SearchService {
 
     public record DishHit(long dishId, String name, String nameZh, String description, int priceCents,
                           List<String> tags, int spiceLevel, long restaurantId, String restaurantSlug,
-                          String restaurantName, String restaurantNameZh, String cuisine, boolean acceptingOrders) {}
+                          String restaurantName, String restaurantNameZh, String cuisine, boolean acceptingOrders,
+                          String image) {}
 
     public record Facet(String value, long count) {}
 
@@ -44,8 +45,11 @@ public class SearchService {
     private final SearchIndexer indexer;
     private final JdbcClient db;
     private final Counter fallbacks;
+    private final com.wokflow.api.images.ImageService images;
 
-    public SearchService(ElasticsearchClient es, SearchIndexer indexer, JdbcClient db, MeterRegistry meters) {
+    public SearchService(ElasticsearchClient es, SearchIndexer indexer, JdbcClient db, MeterRegistry meters,
+                         com.wokflow.api.images.ImageService images) {
+        this.images = images;
         this.es = es;
         this.indexer = indexer;
         this.db = db;
@@ -97,7 +101,7 @@ public class SearchService {
             return s;
         }, DishDocument.class);
 
-        List<DishHit> hits = res.hits().hits().stream().map(Hit::source).map(SearchService::hit).toList();
+        List<DishHit> hits = res.hits().hits().stream().map(Hit::source).map(this::hit).toList();
         long total = res.hits().total() == null ? hits.size() : res.hits().total().value();
         return new Result(total, hits, Map.of("tags", facet(res, "tags"), "cuisine", facet(res, "cuisine")), false);
     }
@@ -149,10 +153,10 @@ public class SearchService {
                 .map((StringTermsBucket b) -> new Facet(b.key().stringValue(), b.docCount())).toList();
     }
 
-    private static DishHit hit(DishDocument d) {
+    private DishHit hit(DishDocument d) {
         return new DishHit(d.dishId(), d.name(), d.nameZh(), d.description(), d.priceCents(), d.tags(), d.spiceLevel(),
                 d.restaurantId(), d.restaurantSlug(), d.restaurantName(), d.restaurantNameZh(), d.cuisine(),
-                d.acceptingOrders());
+                d.acceptingOrders(), images.url(d.image()));
     }
 
     /** Degraded mode: trigram similarity in Postgres. No pinyin, no facets, but the app keeps working. */
@@ -160,7 +164,7 @@ public class SearchService {
         String q = c.q() == null ? "" : c.q().strip();
         String like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
         List<DishHit> hits = db.sql("""
-                select d.id, d.name, d.name_zh, d.description, d.price_cents, d.tags, d.spice_level,
+                select d.id, d.name, d.name_zh, d.description, d.price_cents, d.tags, d.spice_level, d.image_key,
                        r.id as rid, r.slug, r.name as rname, r.name_zh as rname_zh, r.cuisine, r.accepting_orders
                 from dishes d join restaurants r on r.id = d.restaurant_id
                 where d.available and d.archived_at is null and r.status = 'LIVE'
@@ -178,7 +182,7 @@ public class SearchService {
                         rs.getString("description"), rs.getInt("price_cents"),
                         List.of((String[]) rs.getArray("tags").getArray()), rs.getInt("spice_level"), rs.getLong("rid"),
                         rs.getString("slug"), rs.getString("rname"), rs.getString("rname_zh"), rs.getString("cuisine"),
-                        rs.getBoolean("accepting_orders")))
+                        rs.getBoolean("accepting_orders"), images.url(rs.getString("image_key"))))
                 .list();
         return new Result(hits.size(), hits, Map.of(), true);
     }
