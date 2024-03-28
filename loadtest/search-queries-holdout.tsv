@@ -1,0 +1,48 @@
+# Held-out queries: written after synonyms.txt, and synonyms.txt was NOT edited after running them.
+# The tuning set (search-queries.tsv) was used to write the synonym list, so only this file says how
+# well the list generalizes. Same format: query <TAB> category <TAB> acceptable answers.
+char siu bao	syn	叉烧包
+bbq pork bun	en	叉烧包
+pork buns	en	叉烧包,生煎包
+beef chow fun	en	干炒牛河
+ho fun	syn	干炒牛河
+spicy fish	en	水煮鱼,剁椒鱼头
+shui zhu yu	py	水煮鱼
+shuizhuyu	py	水煮鱼
+lu rou fan	py	卤肉饭
+minced pork rice	syn	卤肉饭
+oyster pancake	syn	蚵仔煎
+salt and pepper chicken	syn	盐酥鸡
+milk tea	en	港式奶茶,珍珠奶茶
+lemon tea	en	冻柠茶
+century egg congee	en	皮蛋瘦肉粥
+jook	syn	皮蛋瘦肉粥,鱼片粥,白粥油条
+rice porridge	syn	皮蛋瘦肉粥,鱼片粥,白粥油条
+youtiao	py	白粥油条
+cold noodles	en	凉皮,酿皮
+liangpi	py	凉皮
+sheng jian bao	py	生煎包
+shengjian	py	生煎包
+crab xiaolongbao	en	蟹粉小笼包
+twice cooked pork	en	回锅肉
+hui guo rou	py	回锅肉
+gan bian si ji dou	py	干煸四季豆
+string beans	syn	干煸四季豆
+cucumber salad	en	拍黄瓜
+smashed cucmber	typo	拍黄瓜
+chiken feet	typo	豉汁凤爪
+eg tart	typo	蛋挞
+lanzhou beef ramen	syn	兰州牛肉拉面
+egg dumplings	en	韭菜鸡蛋饺子
+taro	en	芋角
+turnip	en	萝卜糕
+spicy wontons	en	红油抄手
+chao shou	py	红油抄手
+guo bao rou	py	锅包肉
+sweet sour pork	en	锅包肉
+红烧牛肉面	zh	红烧牛肉面
+牛肉拉面	zh	兰州牛肉拉面
+羊肉泡馍	zh	羊肉泡馍
+肉串	zh	羊肉串,孜然羊肉串
+鱼	zh	鱼片粥,水煮鱼,剁椒鱼头
+云吞	syn	云吞面,红油抄手
