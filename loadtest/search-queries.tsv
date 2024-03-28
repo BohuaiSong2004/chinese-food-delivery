@@ -1,0 +1,50 @@
+# query <TAB> category <TAB> acceptable answers (Chinese dish names, comma-separated; any of them counts)
+# Written against the demo catalog. Categories: en = English, typo, zh = characters, py = pinyin,
+# ini = pinyin initials, syn = another common name for the dish, mix = mixed scripts.
+mapo tofu	en	麻婆豆腐
+mapo tofo	typo	麻婆豆腐
+mapodoufu	py	麻婆豆腐
+mpdf	ini	麻婆豆腐
+麻婆豆腐	zh	麻婆豆腐
+xiaolongbao	py	鲜肉小笼包,蟹粉小笼包,虾仁鲜肉小笼包
+xlb	ini	鲜肉小笼包,蟹粉小笼包,虾仁鲜肉小笼包
+dan dan	en	担担面
+dandanmian	py	担担面
+ddm	ini	担担面
+congee fish	en	鱼片粥
+yupianzhou	py	鱼片粥
+wonton noodle	en	云吞面
+wonton nodle	typo	云吞面
+roujiamo	py	肉夹馍
+biangbiang	py	油泼扯面
+kung pao chicken	en	宫保鸡丁
+kung pow chicken	typo	宫保鸡丁
+gongbao	py	宫保鸡丁
+宫爆鸡丁	syn	宫保鸡丁
+beef noodle soup	en	兰州牛肉拉面,红烧牛肉面
+pork belly	en	红烧肉,湘式红烧肉
+egg tart	en	蛋挞
+dumplins	typo	猪肉白菜饺子,羊肉香菜饺子,韭菜鸡蛋饺子,韭菜猪肉锅贴,虾仁鲜肉小笼包,虾饺,芋角,红油抄手
+小笼包	zh	鲜肉小笼包,蟹粉小笼包,虾仁鲜肉小笼包
+奶茶	zh	港式奶茶,珍珠奶茶
+肠粉	zh	虾肠粉
+麻婆 tofu	mix	麻婆豆腐
+potstickers	syn	韭菜猪肉锅贴
+cilantro dumplings	syn	羊肉香菜饺子
+boba	syn	珍珠奶茶
+pearl milk tea	syn	珍珠奶茶
+shumai	syn	烧卖
+har gow	syn	虾饺
+cheung fun	syn	虾肠粉
+phoenix claws	syn	豉汁凤爪
+lamb kebab	syn	羊肉串,孜然羊肉串
+green onion noodles	syn	葱油拌面
+radish cake	syn	萝卜糕
+nian gao	py	桂花糖年糕
+lamian	py	兰州牛肉拉面,炒拉面
+bean curd	syn	麻婆豆腐
+chilli chicken	syn	辣子鸡
+水饺	syn	猪肉白菜饺子,羊肉香菜饺子,韭菜鸡蛋饺子
+汤包	syn	鲜肉小笼包,蟹粉小笼包,虾仁鲜肉小笼包
+馄饨	syn	云吞面,红油抄手
+烧麦	syn	烧卖

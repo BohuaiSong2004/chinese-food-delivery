@@ -1,0 +1,47 @@
+# Other names for the same dish or ingredient, used to rewrite search queries
+# (Elasticsearch and the Postgres fallback both read this file).
+#
+#   a, b, c     any of them also searches for the others
+#   a, b => c   a and b search for each other and for c; c does not search for a or b
+#
+# Latin entries match whole words, Chinese entries match anywhere in the query.
+# Keep entries lowercase. Found by checking queries that returned nothing
+# (loadtest/search-queries.tsv, and the zero-result report on the admin page).
+
+# Cantonese, Mandarin and menu English spellings
+kung pao, kung pow, gong bao
+shumai, shu mai, siu mai, siumai, shaomai, shao mai
+har gow, ha gow, hakao => shrimp dumplings
+cheung fun, cheong fun, chee cheong fun => rice noodle rolls
+char siu, cha siu, chashu, bbq pork, barbecue pork
+chow fun, ho fun, hor fun
+wonton, wantan, won ton, wanton
+xiao long bao, soup dumplings, soup dumpling
+egg custard tart, dan tat, daan tat => egg tarts
+nian gao, niangao => rice cakes
+rou jia mo => roujiamo
+jiaozi => dumplings
+potsticker, potstickers, guotie => pan-fried dumplings
+phoenix claws, phoenix claw, fung zao => chicken feet
+
+# Ingredients and dishes with more than one English name
+cilantro, coriander
+green onion, spring onion, scallion
+radish cake, turnip cake, lo bak go
+bean curd, tofu
+eggplant, aubergine
+chilli, chili, chile, chillies => chilies
+chili chicken, chilli chicken, la zi ji => chongqing spicy chicken
+kebab, kebabs, kabob, kabobs, skewer, skewers
+boba, bubble tea, pearl milk tea, bubble milk tea, tapioca tea
+lamian, hand-pulled noodles, hand pulled noodles
+
+# Chinese
+水饺, 饺子
+汤包, 小笼包, 小笼
+馄饨, 云吞, 抄手
+烧麦, 烧卖
+宫爆, 宫保
+鸡爪, 凤爪
+面条 => 面
+珍珠奶茶, 波霸奶茶
