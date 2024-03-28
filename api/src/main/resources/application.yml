@@ -56,6 +56,7 @@ wokflow:
   public-origin: ${PUBLIC_ORIGIN:http://localhost:5173}
   jwt:
     issuer: ${JWT_ISSUER:wokflow}
+    private-key: ${JWT_PRIVATE_KEY:}             # PEM text (e.g. injected from a secrets manager), or:
     private-key-file: ${JWT_PRIVATE_KEY_FILE:}
     generate-if-missing: ${JWT_GENERATE_IF_MISSING:false}   # local stacks only; production mounts a secret
     access-ttl: ${JWT_ACCESS_TTL:15m}

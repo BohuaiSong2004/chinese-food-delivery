@@ -46,6 +46,7 @@ class JwtKeysTest {
         Path both = dir.resolve("jwt.pem");
         Files.writeString(both, pem("PRIVATE KEY", pair.getPrivate().getEncoded()) + pem("PUBLIC KEY", pair.getPublic().getEncoded()));
         assertThat(JwtKeys.read(both).getPublic()).isEqualTo(pair.getPublic());
+        assertThat(JwtKeys.parse(Files.readString(both), "env").getPublic()).isEqualTo(pair.getPublic()); // JWT_PRIVATE_KEY
 
         Path onlyPrivate = dir.resolve("private.pem");
         Files.writeString(onlyPrivate, pem("PRIVATE KEY", pair.getPrivate().getEncoded()));

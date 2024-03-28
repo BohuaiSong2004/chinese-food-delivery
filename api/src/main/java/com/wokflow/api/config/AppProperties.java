@@ -15,7 +15,7 @@ public record AppProperties(
         Outbox outbox,
         Orders orders) {
 
-    public record Jwt(String issuer, String privateKeyFile, boolean generateIfMissing, Duration accessTtl,
+    public record Jwt(String issuer, String privateKey, String privateKeyFile, boolean generateIfMissing, Duration accessTtl,
                       Duration refreshTtl, boolean refreshCookieSecure) {}
 
     public record Payments(String baseUrl, String secretKey, String webhookSecret,
