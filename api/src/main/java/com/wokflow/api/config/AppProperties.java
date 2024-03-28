@@ -25,8 +25,11 @@ public record AppProperties(
     public record Jwt(String issuer, String privateKey, String privateKeyFile, boolean generateIfMissing, Duration accessTtl,
                       Duration refreshTtl, boolean refreshCookieSecure, String previousPublicKeys, String previousPublicKeysFile) {}
 
+    /** provider: "mockpay" (the bundled sandbox, default) or "stripe" (Checkout Sessions). */
     public record Payments(String baseUrl, String secretKey, String webhookSecret,
-                           Duration webhookTolerance, Duration paymentWindow) {}
+                           Duration webhookTolerance, Duration paymentWindow, String provider, Stripe stripe) {}
+
+    public record Stripe(String baseUrl, String secretKey, String webhookSecret) {}
 
     public record Search(String indexAlias, boolean reindexOnStartup) {}
 

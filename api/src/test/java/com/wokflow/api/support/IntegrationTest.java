@@ -75,6 +75,7 @@ public abstract class IntegrationTest {
         r.add("wokflow.payments.webhook-secret", () -> WEBHOOK_SECRET);
         r.add("spring.datasource.hikari.maximum-pool-size", () -> 30);
         r.add("wokflow.images.dir", () -> IMAGE_DIR.toString());
+        r.add("wokflow.payments.stripe.webhook-secret", () -> STRIPE_WEBHOOK_SECRET);
         r.add("spring.mail.host", MAILPIT::getHost);
         r.add("spring.mail.port", () -> MAILPIT.getMappedPort(1025));
     }
@@ -321,6 +322,8 @@ public abstract class IntegrationTest {
         }
         return UUID.fromString(r.body().get("id").asText());
     }
+
+    public static final String STRIPE_WEBHOOK_SECRET = "whsec_stripe_it";
 
     protected Http.Res webhook(String eventId, String type, UUID orderId) {
         return webhook(eventId, type, FakePaymentProvider.intentId(orderId), clock.instant().getEpochSecond(), WEBHOOK_SECRET);

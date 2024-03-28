@@ -74,6 +74,11 @@ wokflow:
     webhook-secret: ${MOCKPAY_WEBHOOK_SECRET:whsec_wokflow_dev}
     webhook-tolerance: 5m
     payment-window: ${PAYMENT_WINDOW:15m}
+    provider: ${PAYMENT_PROVIDER:mockpay}
+    stripe:   # used when PAYMENT_PROVIDER=stripe; test-mode keys only (sk_test_..., whsec_...)
+      base-url: ${STRIPE_API_URL:https://api.stripe.com}
+      secret-key: ${STRIPE_SECRET_KEY:}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
   search:
     index-alias: ${ES_INDEX_ALIAS:dishes}
     reindex-on-startup: ${ES_REINDEX_ON_STARTUP:true}

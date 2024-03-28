@@ -35,7 +35,7 @@ public class SecurityConfig {
                 .requestMatchers("/.well-known/jwks.json", "/api/openapi.json", "/api/docs/**", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/signin", "/api/auth/refresh", "/api/auth/signout",
                         "/api/auth/forgot", "/api/auth/reset").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/payments/webhook", "/api/payments/stripe/webhook").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/restaurants/**", "/api/search/**", "/api/trending", "/api/images/**", "/api/geo/**").permitAll()
                 .requestMatchers("/api/merchant/**").hasAnyRole("MERCHANT", "ADMIN")
                 .requestMatchers("/api/rider/**").hasRole("RIDER")

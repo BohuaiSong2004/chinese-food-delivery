@@ -12,6 +12,8 @@ import org.springframework.web.client.RestClient;
 
 /** HTTP client for the bundled sandbox provider (mockpay/), shaped like a Stripe-style API. */
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "wokflow.payments", name = "provider",
+        havingValue = "mockpay", matchIfMissing = true)
 public class MockPayClient implements PaymentProvider {
     private final RestClient http;
 
