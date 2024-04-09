@@ -27,7 +27,7 @@ public class PartnerController {
         static Settings of(Restaurant r, String note) {
             return new Settings(r.id(), r.slug(), r.status().name(), note, r.version(), new RestaurantProfile(
                     r.name(), r.nameZh(), r.description(), r.cuisine(), r.tags(), r.neighborhood(), r.address(),
-                    r.deliveryFeeCents(), r.minOrderCents(), r.prepMinutes(), hhmm(r.opensAt()), hhmm(r.closesAt()),
+                    r.zip(), r.lat(), r.lng(), r.deliveryRadiusKm(), r.deliveryFeeCents(), r.minOrderCents(), r.prepMinutes(), hhmm(r.opensAt()), hhmm(r.closesAt()),
                     r.open24h(), r.timeZone()));
         }
 

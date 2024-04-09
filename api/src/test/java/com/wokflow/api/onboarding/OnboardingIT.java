@@ -15,7 +15,8 @@ class OnboardingIT extends IntegrationTest {
     static Map<String, Object> profile(String name) {
         return Map.ofEntries(Map.entry("name", name), Map.entry("nameZh", "新店"), Map.entry("description", "Hand-pulled noodles"),
                 Map.entry("cuisine", "northwestern"), Map.entry("tags", List.of("noodles")), Map.entry("neighborhood", "Alhambra"),
-                Map.entry("address", "1 Valley Blvd, Alhambra, CA"), Map.entry("deliveryFeeCents", 199),
+                Map.entry("address", "1 Valley Blvd, Alhambra, CA"), Map.entry("zip", "91801"), Map.entry("deliveryRadiusKm", 6),
+                Map.entry("deliveryFeeCents", 199),
                 Map.entry("minOrderCents", 0), Map.entry("prepMinutes", 15), Map.entry("opensAt", "00:00"),
                 Map.entry("closesAt", "00:00"), Map.entry("open24h", true));
     }

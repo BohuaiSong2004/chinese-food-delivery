@@ -166,10 +166,23 @@ public abstract class IntegrationTest {
                 insert into users (email, password_hash, display_name, role)
                 select ? || g || '@example.com', (select password_hash from users where email = 'customer@example.com'),
                        'Bulk ' || g, 'CUSTOMER' from generate_series(1, ?) g""").params(prefix, n).update();
-        return db.sql("select id, email, display_name from users where email like ? order by id").param(prefix + "%")
-                .query((rs, i) -> new com.wokflow.api.auth.UserRepository.User(rs.getLong(1), rs.getString(2), "",
-                        rs.getString(3), com.wokflow.api.auth.Role.CUSTOMER))
-                .list().stream().map(u -> tokenService.issue(u, List.of()).value()).toList();
+        db.sql("""
+                insert into addresses (user_id, label, line1, city, zip, lat, lng)
+                select id, 'Home', '1 Race St', 'Alhambra', '91801', 34.0911, -118.1293 from users where email like ?""")
+                .param(prefix + "%").update();
+        List<String> tokens = new java.util.ArrayList<>();
+        db.sql("""
+                select u.id, u.email, u.display_name, a.id from users u join addresses a on a.user_id = u.id
+                where u.email like ? order by u.id""").param(prefix + "%")
+                .query((rs, i) -> {
+                    var u = new com.wokflow.api.auth.UserRepository.User(rs.getLong(1), rs.getString(2), "", rs.getString(3),
+                            com.wokflow.api.auth.Role.CUSTOMER);
+                    String token = tokenService.issue(u, List.of()).value();
+                    addressByToken.put(token, rs.getLong(4));
+                    return token;
+                })
+                .list().forEach(tokens::add);
+        return tokens;
     }
 
     /** Signs up through the API with the given account type and returns the access token. */
@@ -234,8 +247,9 @@ public abstract class IntegrationTest {
                 .param(merchant).update();
         long rid = db.sql("""
                 insert into restaurants (slug, name, name_zh, cuisine, neighborhood, address, delivery_fee_cents, min_order_cents,
-                                         opens_at, closes_at, open_24h)
-                values (?, ?, '测试厨房', 'test', 'Testville', '1 Test Way', 300, 0, '00:00', '00:00', true) returning id""")
+                                         opens_at, closes_at, open_24h, zip, lat, lng, delivery_radius_km)
+                values (?, ?, '测试厨房', 'test', 'Testville', '1 Test Way', 300, 0, '00:00', '00:00', true,
+                        '91801', 34.0911, -118.1293, 8) returning id""")
                 .params(slug, "Kitchen " + slug).query(Long.class).single();
         db.sql("insert into restaurant_staff (restaurant_id, user_id) select ?, id from users where email = ?").params(rid, merchant).update();
         db.sql("insert into ledger_accounts (code, kind, name, restaurant_id) values (?, 'LIABILITY', 'test', ?)")
@@ -251,10 +265,47 @@ public abstract class IntegrationTest {
         return new TestKitchen(rid, slug, merchant, plain, limited);
     }
 
+    private final Map<String, Long> addressByToken = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** The customer's saved address in Alhambra (created on first use; same ZIP centroid as the test kitchens). */
+    protected long addressId(String token) {
+        // Not computeIfAbsent: that would make an HTTP call while holding the map's bin lock, and on JDK 21 the
+        // virtual threads blocked on that monitor pin the carriers the in-process server needs to answer it.
+        Long known = addressByToken.get(token);
+        if (known != null) {
+            return known;
+        }
+        var lock = addressLocks.computeIfAbsent(token, t -> new java.util.concurrent.locks.ReentrantLock());
+        lock.lock(); // a ReentrantLock parks a virtual thread without pinning it
+        try {
+            known = addressByToken.get(token);
+            if (known != null) {
+                return known;
+            }
+            var list = http.get("/api/me/addresses", token);
+            long id;
+            if (list.status() == 200 && list.body().size() > 0) {
+                id = list.body().get(0).get("id").asLong();
+            } else {
+                var r = http.post("/api/me/addresses", token, Map.of("label", "Home", "line1", "1 Test Street", "zip", "91801"));
+                if (r.status() != 201) {
+                    throw new AssertionError("address failed: " + r);
+                }
+                id = r.body().get("id").asLong();
+            }
+            addressByToken.put(token, id);
+            return id;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private final Map<String, java.util.concurrent.locks.ReentrantLock> addressLocks = new java.util.concurrent.ConcurrentHashMap<>();
+
     protected Http.Res placeOrder(String token, long restaurantId, Map<Long, Integer> items, String key) {
         var lines = items.entrySet().stream().map(e -> Map.of("dishId", e.getKey(), "quantity", e.getValue())).toList();
         return http.post("/api/orders", token,
-                Map.of("restaurantId", restaurantId, "items", lines, "deliveryAddress", "1 Test Street"),
+                Map.of("restaurantId", restaurantId, "items", lines, "addressId", addressId(token)),
                 Map.of("Idempotency-Key", key));
     }
 
@@ -279,6 +330,25 @@ public abstract class IntegrationTest {
 
     protected Http.Res pay(UUID orderId) {
         return webhook(unique("evt_"), "payment_intent.succeeded", orderId);
+    }
+
+    /** Drives an order through the whole lifecycle with the kitchen's merchant and the demo rider. */
+    protected void deliver(UUID orderId, TestKitchen k) {
+        if (!"PAID".equals(status(orderId))) {
+            pay(orderId);
+        }
+        String merchant = signIn(k.merchantEmail());
+        String rider = signIn("rider@example.com");
+        for (var step : List.of(List.of(merchant, "/api/merchant/orders/" + orderId + "/accept"),
+                List.of(merchant, "/api/merchant/orders/" + orderId + "/ready"),
+                List.of(rider, "/api/rider/orders/" + orderId + "/claim"),
+                List.of(rider, "/api/rider/orders/" + orderId + "/pickup"),
+                List.of(rider, "/api/rider/orders/" + orderId + "/deliver"))) {
+            var r = http.post(step.get(1), step.get(0), null);
+            if (r.status() != 200) {
+                throw new AssertionError(step.get(1) + " -> " + r);
+            }
+        }
     }
 
     protected String status(UUID orderId) {

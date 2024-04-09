@@ -73,7 +73,7 @@ class OrderFlowIT extends IntegrationTest {
 
         assertThat(placeOrder(customer, k.id(), Map.of(k.limitedDish(), 3), key).code()).isEqualTo("idempotency_key_reused");
         var noKey = http.post("/api/orders", customer, Map.of("restaurantId", k.id(),
-                "items", java.util.List.of(Map.of("dishId", k.plainDish(), "quantity", 1)), "deliveryAddress", "x"));
+                "items", java.util.List.of(Map.of("dishId", k.plainDish(), "quantity", 1)), "addressId", addressId(customer)));
         assertThat(noKey.code()).isEqualTo("idempotency_key_required");
     }
 

@@ -17,12 +17,12 @@ import org.springframework.web.bind.annotation.RestController;
 /** Admin review queue: restaurant applications and rider sign-ups. */
 @RestController
 @RequestMapping("/api/admin")
-public class ReviewController {
+public class ApplicationReviewController {
     public record Note(@Size(max = 300) String note) {}
 
     private final OnboardingService onboarding;
 
-    public ReviewController(OnboardingService onboarding) { this.onboarding = onboarding; }
+    public ApplicationReviewController(OnboardingService onboarding) { this.onboarding = onboarding; }
 
     @GetMapping("/applications")
     Map<String, Object> queue() { return onboarding.queue(CurrentUser.require()); }

@@ -37,7 +37,8 @@ public class DemoSeeder implements ApplicationRunner {
     record CategorySeed(String name, String nameZh, List<DishSeed> dishes) {}
     record RestaurantSeed(String slug, String name, String nameZh, String description, String cuisine, List<String> tags,
                           String neighborhood, String address, int deliveryFeeCents, int minOrderCents, int prepMinutes,
-                          String opensAt, String closesAt, boolean open24h, List<String> staff, List<CategorySeed> categories) {}
+                          String opensAt, String closesAt, boolean open24h, List<String> staff, List<CategorySeed> categories,
+                          String zip, double lat, double lng, Double deliveryRadiusKm) {}
     record UserSeed(String email, String name, String role) {}
     record Seed(List<RestaurantSeed> restaurants, List<UserSeed> users) {}
 
@@ -94,6 +95,13 @@ public class DemoSeeder implements ApplicationRunner {
                 db.sql("insert into users (email, password_hash, display_name, role) values (?, ?, ?, 'CUSTOMER') on conflict (email) do nothing")
                         .params("loadtest+" + i + "@example.com", hash, "Load Tester " + i).update();
             }
+            // Every demo and load-test customer has a saved address in Alhambra (inside every demo kitchen's range
+            // except the Rowland Heights one); only added if they have none, so edits are kept.
+            db.sql("""
+                    insert into addresses (user_id, label, line1, city, zip, lat, lng)
+                    select u.id, 'Home', '1 W Main St', 'Alhambra', '91801', 34.0911, -118.1293 from users u
+                    where u.role = 'CUSTOMER' and (u.email = 'customer@example.com' or u.email like 'loadtest+%@example.com')
+                      and not exists (select 1 from addresses a where a.user_id = u.id)""").update();
             for (RestaurantSeed r : seed.restaurants()) {
                 seedRestaurant(r);
             }
@@ -113,6 +121,9 @@ public class DemoSeeder implements ApplicationRunner {
                         LocalTime.parse(r.opensAt()), LocalTime.parse(r.closesAt()), r.open24h())
                 .update();
         long rid = db.sql("select id from restaurants where slug = ?").param(r.slug()).query(Long.class).single();
+        // Location arrived in a later release: fill it in once, never overwrite a merchant's edit.
+        db.sql("update restaurants set zip = ?, lat = ?, lng = ?, delivery_radius_km = ? where id = ? and lat is null")
+                .params(r.zip(), r.lat(), r.lng(), r.deliveryRadiusKm() == null ? 8.0 : r.deliveryRadiusKm(), rid).update();
         String tz = db.sql("select time_zone from restaurants where id = ?").param(rid).query(String.class).single();
         LocalDate today = LocalDate.now(clock.withZone(ZoneId.of(tz)));
         ledger.ensureMerchantAccount(rid, r.name());

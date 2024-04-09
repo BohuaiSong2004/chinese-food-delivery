@@ -210,6 +210,15 @@
         "type": "keyword",
         "index": false,
         "doc_values": false
+      },
+      "location": {
+        "type": "geo_point"
+      },
+      "delivery_area": {
+        "type": "geo_shape"
+      },
+      "rating": {
+        "type": "float"
       }
     }
   }

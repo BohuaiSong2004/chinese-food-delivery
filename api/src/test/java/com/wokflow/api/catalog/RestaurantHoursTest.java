@@ -13,7 +13,7 @@ class RestaurantHoursTest {
 
     static Restaurant r(String open, String close, boolean h24) {
         return new Restaurant(1, "x", "X", "X", "", "c", List.of(), "n", "a", 0, 0, 10, 1500, LocalTime.parse(open),
-                LocalTime.parse(close), h24, LA.getId(), true, 1, com.wokflow.api.catalog.RestaurantStatus.LIVE, null, null);
+                LocalTime.parse(close), h24, LA.getId(), true, 1, com.wokflow.api.catalog.RestaurantStatus.LIVE, null, null, null, null, null, 8, 0, 0);
     }
 
     static java.time.Instant la(int y, int m, int d, int h, int min) {

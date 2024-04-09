@@ -20,7 +20,7 @@ public class CatalogRepository {
     static final String RESTAURANT_COLS = """
             id, slug, name, name_zh, description, cuisine, tags, neighborhood, address, delivery_fee_cents,
             min_order_cents, prep_minutes, commission_bps, opens_at, closes_at, open_24h, time_zone,
-            accepting_orders, version, status, image_key,
+            accepting_orders, version, status, image_key, zip, lat, lng, delivery_radius_km, rating_sum, rating_count,
             coalesce(image_key, (select d.image_key from dishes d where d.restaurant_id = restaurants.id
                                  and d.archived_at is null and d.image_key is not null
                                  order by ('signature' = any(d.tags)) desc, d.id limit 1)) as cover_key""";
@@ -149,7 +149,9 @@ public class CatalogRepository {
                 rs.getInt("min_order_cents"), rs.getInt("prep_minutes"), rs.getInt("commission_bps"),
                 rs.getTime("opens_at").toLocalTime(), rs.getTime("closes_at").toLocalTime(), rs.getBoolean("open_24h"),
                 rs.getString("time_zone"), rs.getBoolean("accepting_orders"), rs.getLong("version"),
-                RestaurantStatus.valueOf(rs.getString("status")), rs.getString("image_key"), rs.getString("cover_key"));
+                RestaurantStatus.valueOf(rs.getString("status")), rs.getString("image_key"), rs.getString("cover_key"),
+                rs.getString("zip"), (Double) rs.getObject("lat"), (Double) rs.getObject("lng"), rs.getDouble("delivery_radius_km"),
+                rs.getLong("rating_sum"), rs.getInt("rating_count"));
     }
 
     static Dish dish(ResultSet rs, int n) throws SQLException {

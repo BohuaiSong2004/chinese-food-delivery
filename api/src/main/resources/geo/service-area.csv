@@ -1,0 +1,35 @@
+# ZIP codes the demo delivers to, with approximate centroids (WGS84). Addresses are geocoded to
+# their ZIP centroid unless the customer drops a pin within 3 km of it. Production would call a
+# geocoding service (e.g. Amazon Location Service) behind the same Geocoder interface.
+zip,city,lat,lng
+91801,Alhambra,34.0911,-118.1293
+91803,Alhambra,34.0744,-118.1434
+91776,San Gabriel,34.0889,-118.0952
+91775,San Gabriel,34.1153,-118.0896
+91754,Monterey Park,34.0505,-118.1438
+91755,Monterey Park,34.0491,-118.1153
+91770,Rosemead,34.0650,-118.0848
+91780,Temple City,34.1017,-118.0581
+91006,Arcadia,34.1325,-118.0303
+91007,Arcadia,34.1279,-118.0480
+91108,San Marino,34.1225,-118.1129
+91030,South Pasadena,34.1106,-118.1572
+91101,Pasadena,34.1468,-118.1393
+91105,Pasadena,34.1376,-118.1660
+91106,Pasadena,34.1395,-118.1283
+91024,Sierra Madre,34.1680,-118.0510
+91016,Monrovia,34.1500,-118.0006
+91731,El Monte,34.0787,-118.0388
+91732,El Monte,34.0731,-118.0145
+91733,South El Monte,34.0466,-118.0539
+91745,Hacienda Heights,33.9993,-117.9681
+91748,Rowland Heights,33.9804,-117.8986
+91765,Diamond Bar,33.9917,-117.8122
+91789,Walnut,34.0196,-117.8578
+90012,Los Angeles (Chinatown),34.0614,-118.2385
+90013,Los Angeles (Downtown),34.0441,-118.2405
+90031,Los Angeles (Lincoln Heights),34.0784,-118.2116
+90032,Los Angeles (El Sereno),34.0815,-118.1777
+90041,Los Angeles (Eagle Rock),34.1376,-118.2079
+90042,Los Angeles (Highland Park),34.1146,-118.1923
+90063,Los Angeles (City Terrace),34.0447,-118.1855

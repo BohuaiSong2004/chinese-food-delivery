@@ -88,6 +88,9 @@ wokflow:
     # Leaves pool connections for webhooks and reads during a rush; extra placements queue in memory instead.
     placement-concurrency: ${ORDER_PLACEMENT_CONCURRENCY:12}
     placement-wait: 10s
+  delivery:
+    fee-per-km-cents: ${DELIVERY_FEE_PER_KM_CENTS:60}
+    free-km: ${DELIVERY_FREE_KM:2}
   images:
     store: ${IMAGE_STORE:local}               # local | s3
     dir: ${IMAGE_DIR:./data/images}
