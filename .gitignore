@@ -19,3 +19,6 @@ sandbox-ca.crt
 loadtest/results/raw/
 *.tsbuildinfo
 *.sandbox.dockerignore
+infra/.terraform/
+infra/*.tfstate*
+infra/terraform.tfvars
