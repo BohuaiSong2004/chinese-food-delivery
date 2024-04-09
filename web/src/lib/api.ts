@@ -1,0 +1,120 @@
+// API client. The access token lives only in memory; the refresh token is an
+// httpOnly cookie scoped to /api/auth, so script on the page can never read it.
+
+export type Role = 'CUSTOMER' | 'MERCHANT' | 'RIDER' | 'ADMIN';
+export interface User { id: number; email: string; name: string; role: Role; restaurantIds: number[] }
+export interface Session { accessToken: string; expiresAt: string; user: User }
+
+export class ApiError extends Error {
+  constructor(public status: number, public code: string, message: string, public fields?: Record<string, string>) {
+    super(message);
+  }
+}
+
+let accessToken: string | null = null;
+let refreshing: Promise<Session | null> | null = null;
+let onSession: (s: Session | null) => void = () => {};
+
+export function setSessionListener(fn: (s: Session | null) => void) { onSession = fn; }
+export function setAccessToken(token: string | null) { accessToken = token; }
+export function hasAccessToken() { return accessToken !== null; }
+
+/** One refresh at a time, shared by every request that hit a 401 meanwhile. */
+export function refreshSession(): Promise<Session | null> {
+  refreshing ??= fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' })
+    .then(async (r) => (r.ok ? ((await r.json()) as Session) : null))
+    .catch(() => null)
+    .then((s) => {
+      accessToken = s?.accessToken ?? null;
+      onSession(s);
+      return s;
+    })
+    .finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+interface Options { method?: string; body?: unknown; headers?: Record<string, string>; signal?: AbortSignal }
+
+export async function api<T>(path: string, opts: Options = {}, retried = false): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  const res = await fetch(path, {
+    method: opts.method ?? 'GET',
+    headers,
+    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    credentials: 'same-origin',
+    signal: opts.signal,
+  });
+  if (res.status === 401 && !retried && !path.startsWith('/api/auth/')) {
+    const s = await refreshSession();
+    if (s) return api<T>(path, opts, true);
+  }
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : undefined;
+  if (!res.ok) {
+    throw new ApiError(res.status, data?.code ?? 'error', data?.detail ?? res.statusText, data?.fields);
+  }
+  return data as T;
+}
+
+export interface StreamHandlers { onEvent: (name: string, data: string) => void; onOpen?: () => void; onDown?: () => void }
+
+/**
+ * Server-sent events over fetch (EventSource cannot send an Authorization
+ * header). Reconnects with backoff; the server closes the stream when the
+ * access token expires, so each reconnect refreshes first if needed.
+ */
+export function openStream(path: string, h: StreamHandlers): () => void {
+  const ctl = new AbortController();
+  let attempt = 0;
+  const run = async () => {
+    while (!ctl.signal.aborted) {
+      try {
+        if (!accessToken) await refreshSession();
+        const res = await fetch(path, {
+          headers: { Accept: 'text/event-stream', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+          signal: ctl.signal,
+        });
+        if (res.status === 401) {
+          await refreshSession();
+          throw new Error('unauthorized');
+        }
+        if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
+        attempt = 0;
+        h.onOpen?.();
+        const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+        let buf = '';
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += value;
+          let idx: number;
+          while ((idx = buf.indexOf('\n\n')) >= 0) {
+            const block = buf.slice(0, idx);
+            buf = buf.slice(idx + 2);
+            let name = 'message';
+            const data: string[] = [];
+            for (const line of block.split('\n')) {
+              if (line.startsWith('event:')) name = line.slice(6).trim();
+              else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+            }
+            if (data.length) h.onEvent(name, data.join('\n'));
+          }
+        }
+      } catch {
+        if (ctl.signal.aborted) return;
+      }
+      h.onDown?.();
+      attempt++;
+      await new Promise((r) => setTimeout(r, Math.min(10_000, 500 * 2 ** Math.min(attempt, 5))));
+    }
+  };
+  void run();
+  return () => ctl.abort();
+}
+
+export function newIdempotencyKey(): string {
+  return crypto.randomUUID();
+}
