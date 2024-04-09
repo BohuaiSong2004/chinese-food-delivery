@@ -53,6 +53,8 @@ class SearchIT extends IntegrationTest {
         assertThat(names("dumplng")).isNotEmpty();                             // typo, plural stem
         assertThat(names("牛肉面")).contains("红烧牛肉面", "兰州牛肉拉面");
         assertThat(names("面")).hasSize(5);                                     // single character
+        assertThat(names("xlb")).contains("鲜肉小笼包");                         // initials of part of the name
+        assertThat(names("biangbiang").getFirst()).isEqualTo("油泼扯面");        // run-together English
     }
 
     @Test
@@ -102,6 +104,17 @@ class SearchIT extends IntegrationTest {
         indexer.ensureReady();
         assertThat(indexer.aliasExists()).isTrue();
         assertThat(names("mpdf").getFirst()).isEqualTo("麻婆豆腐");
+    }
+
+    @Test
+    void aChangedMappingTriggersARebuild() throws Exception {
+        assertThat(indexer.liveMappingHash()).isEqualTo(SearchIndexer.mappingHash());
+        String before = es.indices().getAlias(g -> g.name(indexer.alias())).aliases().keySet().iterator().next();
+        es.indices().putMapping(p -> p.index(before).meta("mapping_hash", co.elastic.clients.json.JsonData.of("old")));
+        indexer.ensureReady();
+        String after = es.indices().getAlias(g -> g.name(indexer.alias())).aliases().keySet().iterator().next();
+        assertThat(after).isNotEqualTo(before);
+        assertThat(indexer.liveMappingHash()).isEqualTo(SearchIndexer.mappingHash());
     }
 
     @Test
