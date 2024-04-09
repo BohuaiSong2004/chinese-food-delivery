@@ -1,5 +1,6 @@
 # Build context: repository root (the API needs the parent pom).
-FROM maven:3.9-eclipse-temurin-21 AS build
+# The jar is platform-independent: build it natively, only the runtime image is per-architecture.
+FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /src
 COPY pom.xml .
 COPY api/pom.xml api/
