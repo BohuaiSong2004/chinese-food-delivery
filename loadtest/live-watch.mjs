@@ -4,10 +4,14 @@
 // that no client ever sees a version go backwards and every client ends on the database's state.
 //
 //   node loadtest/live-watch.mjs [N]      (stack started with SEED_LOADTEST_USERS >= 1000 + N)
+//   PAUSE_MS=500 node loadtest/live-watch.mjs 5   (steps half a second apart)
 const BASE = process.env.BASE_URL ?? 'http://localhost:8000';
 const PAY = process.env.MOCKPAY_URL ?? 'http://localhost:8090';
 const PAY_KEY = process.env.MOCKPAY_SECRET_KEY ?? 'sk_test_wokflow_local';
 const N = Number(process.argv[2] ?? 200);
+// PAUSE_MS: wait between an order's steps. 0 (default) fires them back to back, which is harsher than
+// a real kitchen and rider: each event then waits for the previous one to be published (per-order order).
+const PAUSE = Number(process.env.PAUSE_MS ?? 0);
 
 const post = (url, token, body, headers = {}) => fetch(url, {
   method: 'POST',
@@ -77,6 +81,7 @@ console.log(`${N} streams connected`);
 const t0 = Date.now();
 await Promise.all(orders.map(async ({ order }, i) => {
   const step = async (url, token) => {
+    if (PAUSE) await new Promise((res) => setTimeout(res, PAUSE));
     for (let attempt = 0; attempt < 10; attempt++) {
       const r = await post(url, token);
       if (r.ok) return;
