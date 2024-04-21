@@ -135,3 +135,31 @@ jobs:
           docker buildx build --platform linux/amd64,linux/arm64 -f api/Dockerfile .
           docker buildx build --platform linux/amd64,linux/arm64 -f mockpay/Dockerfile .
           docker buildx build --platform linux/amd64,linux/arm64 web
+
+  terraform:
+    name: Terraform (fmt, validate, tflint, Checkov)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.17.2
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+      - name: tflint
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          curl -sSfL https://github.com/terraform-linters/tflint/releases/download/v0.66.0/tflint_linux_amd64.zip -o /tmp/tflint.zip
+          sudo unzip -oq /tmp/tflint.zip -d /usr/local/bin
+          tflint --init
+          tflint --format compact
+      - name: Checkov
+        run: |
+          pip install --quiet checkov==3.4.7
+          checkov -d . --framework terraform --quiet --compact
