@@ -62,14 +62,6 @@ public class OrderRepository {
                 .update() == 1;
     }
 
-    /** Atomic conditional decrement; false means not enough left. Callers go in ascending dish id order. */
-    public boolean reserveStock(long dishId, int qty) {
-        return db.sql("""
-                update dishes set stock_remaining = stock_remaining - ?
-                where id = ? and daily_stock is not null and stock_remaining >= ?""")
-                .params(qty, dishId, qty).update() == 1;
-    }
-
     public void releaseStock(long dishId, int qty) {
         db.sql("""
                 update dishes set stock_remaining = least(daily_stock, stock_remaining + ?)
