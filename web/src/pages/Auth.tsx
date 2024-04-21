@@ -11,8 +11,13 @@ export function safeNext(next: string | null): string | null {
 }
 
 function home(user: User) {
-  return user.role === 'MERCHANT' || user.role === 'ADMIN' ? '/kitchen' : user.role === 'RIDER' ? '/rider' : '/';
+  if (user.role === 'ADMIN') return '/admin';
+  if (user.role === 'MERCHANT') return user.restaurantIds.length ? '/kitchen' : '/partner';
+  return user.role === 'RIDER' ? '/rider' : '/';
 }
+
+type AccountType = 'CUSTOMER' | 'MERCHANT' | 'RIDER';
+const TYPES: Record<string, AccountType> = { merchant: 'MERCHANT', rider: 'RIDER' };
 
 export function SignIn({ mode }: { mode: 'signin' | 'signup' }) {
   const { t } = useI18n();
@@ -25,13 +30,14 @@ export function SignIn({ mode }: { mode: 'signin' | 'signup' }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const signup = mode === 'signup';
+  const [type, setType] = useState<AccountType>(TYPES[params.get('type') ?? ''] ?? 'CUSTOMER');
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const user = signup ? await auth.signUp(email, password, name) : await auth.signIn(email, password);
+      const user = signup ? await auth.signUp(email, password, name, type) : await auth.signIn(email, password);
       navigate(safeNext(params.get('next')) ?? home(user), { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? Object.values(err.fields ?? {})[0] ?? err.message : String(err));
@@ -43,6 +49,18 @@ export function SignIn({ mode }: { mode: 'signin' | 'signup' }) {
     <section className="auth">
       <h1>{signup ? t('auth.signUp') : t('auth.signIn')}</h1>
       <form method="post" onSubmit={submit}>
+        {signup && (
+          <fieldset className="account-type">
+            <legend>{t('auth.type')}</legend>
+            {(['CUSTOMER', 'MERCHANT', 'RIDER'] as const).map((k) => (
+              <label key={k} className="check">
+                <input type="radio" name="account-type" checked={type === k} onChange={() => setType(k)} />
+                {t(`auth.type.${k}`)}
+              </label>
+            ))}
+            {type === 'RIDER' && <p className="muted">{t('auth.riderNote')}</p>}
+          </fieldset>
+        )}
         {signup && (<><label htmlFor="name">{t('auth.name')}</label>
           <input id="name" required maxLength={60} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} /></>)}
         <label htmlFor="email">{t('auth.email')}</label>
@@ -63,6 +81,7 @@ export function SignIn({ mode }: { mode: 'signin' | 'signup' }) {
             <li><code>customer@example.com</code></li>
             <li><code>merchant@example.com</code></li>
             <li><code>rider@example.com</code></li>
+            <li><code>admin@example.com</code></li>
           </ul>
         </div>
       )}

@@ -12,6 +12,9 @@ const Order = lazy(() => import('./pages/Order').then((m) => ({ default: m.Order
 const Orders = lazy(() => import('./pages/Orders').then((m) => ({ default: m.Orders })));
 const Kitchen = lazy(() => import('./pages/Kitchen').then((m) => ({ default: m.Kitchen })));
 const Rider = lazy(() => import('./pages/Rider').then((m) => ({ default: m.Rider })));
+const Account = lazy(() => import('./pages/Account').then((m) => ({ default: m.Account })));
+const Partner = lazy(() => import('./pages/Partner').then((m) => ({ default: m.Partner })));
+const Admin = lazy(() => import('./pages/Admin').then((m) => ({ default: m.Admin })));
 const page = (el: ReactNode) => <Suspense fallback={<Loading />}>{el}</Suspense>;
 import { useAuth } from './lib/auth';
 import { useI18n } from './lib/i18n';
@@ -45,6 +48,9 @@ const router = createBrowserRouter([
       { path: '/signup', element: <SignIn mode="signup" /> },
       { path: '/kitchen', element: <RequireRole roles={['MERCHANT', 'ADMIN']}>{page(<Kitchen />)}</RequireRole> },
       { path: '/rider', element: <RequireRole roles={['RIDER']}>{page(<Rider />)}</RequireRole> },
+      { path: '/account', element: <RequireRole roles={['CUSTOMER']}>{page(<Account />)}</RequireRole> },
+      { path: '/partner', element: page(<Partner />) },
+      { path: '/admin', element: <RequireRole roles={['ADMIN']}>{page(<Admin />)}</RequireRole> },
       { path: '*', element: <NotFound /> },
     ],
   },

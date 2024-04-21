@@ -30,6 +30,15 @@ test('customer orders, kitchen and rider move it along, customer watches it live
   await rider.locator(`[data-order="${id}"]`).getByRole('button', { name: 'Delivered' }).click();
   await expect(orderStatus(page)).toHaveText('Delivered');
 
+  // the customer reviews it; the review shows on the restaurant page
+  const comment = `Silky congee ${Date.now()}`;
+  await page.getByRole('radio', { name: '5 out of 5 stars' }).check();
+  await page.getByLabel('Tell other diners (optional)').fill(comment);
+  await page.getByRole('button', { name: 'Post review' }).click();
+  await expect(page.getByRole('heading', { name: 'Your review' })).toBeVisible();
+  await page.goto('/r/midnight-congee#reviews');
+  await expect(page.getByText(comment)).toBeVisible();
+
   await kitchen.getByRole('tab', { name: 'Earnings' }).click();
   await expect(kitchen.getByRole('cell', { name: `#${id.slice(0, 8).toUpperCase()}` })).toBeVisible();
 });

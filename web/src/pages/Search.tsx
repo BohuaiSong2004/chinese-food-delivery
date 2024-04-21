@@ -6,6 +6,8 @@ import { money } from '../lib/format';
 import type { SearchResult } from '../lib/types';
 import { ErrorBox, Loading, Names, Spice, Tags } from '../components/bits';
 import { CUISINES } from './Home';
+import { Photo } from '../components/DishImage';
+import { km, useDeliverTo } from '../lib/location';
 
 const TAGS = ['vegetarian', 'vegan', 'halal', 'gluten-free', 'spicy', 'signature', 'noodles', 'dumplings', 'dim-sum', 'seafood', 'soup', 'congee'];
 
@@ -16,8 +18,13 @@ export function Search() {
   const tags = params.getAll('tag');
   const cuisine = params.get('cuisine') ?? '';
   const maxSpice = params.get('maxSpice') ?? '';
+  const { deliverTo } = useDeliverTo();
   const query = new URLSearchParams(params);
   query.set('size', '30');
+  if (deliverTo) { // only dishes from kitchens that deliver to the chosen place
+    query.set('lat', deliverTo.lat.toFixed(4));
+    query.set('lng', deliverTo.lng.toFixed(4));
+  }
   const res = useFetch<SearchResult>(`/api/search?${query.toString()}`);
   const counts = new Map((res.data?.facets.tags ?? []).map((f) => [f.value, f.count]));
 
@@ -68,15 +75,18 @@ export function Search() {
           {res.error ? <ErrorBox error={res.error} retry={res.reload} /> : !res.data ? <Loading /> : (
             <>
               {res.data.degraded && <p className="notice">{t('search.degraded')}</p>}
-              <p className="muted">{t('search.results', { n: res.data.total })}</p>
+              <p className="muted">{t('search.results', { n: res.data.total })}{deliverTo ? ` · ${t('search.deliveringTo', { place: deliverTo.label })}` : ''}</p>
               {res.data.hits.length === 0 ? <p>{t('search.none')}</p> : (
                 <ul className="results">
                   {res.data.hits.map((h) => (
                     <li key={h.dishId} className="card dish-hit">
-                      <h3><Link to={`/r/${h.restaurantSlug}#dish-${h.dishId}`}><Names o={h} /></Link> <Spice level={h.spiceLevel} /></h3>
-                      <p className="muted">{t('search.at', { name: h.restaurantName })} · {money(h.priceCents)}</p>
-                      <p>{h.description}</p>
-                      <Tags tags={h.tags} />
+                      <Photo base={h.image} sizes="7rem" className="thumb" />
+                      <div>
+                        <h3><Link to={`/r/${h.restaurantSlug}#dish-${h.dishId}`}><Names o={h} /></Link> <Spice level={h.spiceLevel} /></h3>
+                        <p className="muted">{t('search.at', { name: h.restaurantName })} · {money(h.priceCents)}{h.distanceM !== undefined ? ` · ${km(h.distanceM)}` : ''}</p>
+                        <p>{h.description}</p>
+                        <Tags tags={h.tags} />
+                      </div>
                     </li>
                   ))}
                 </ul>
