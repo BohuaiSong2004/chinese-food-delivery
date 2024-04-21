@@ -69,7 +69,15 @@ export function Home() {
 
       <section aria-labelledby="trending">
         <h2 id="trending">{t('home.trending')}</h2>
-        {trending.error ? <ErrorBox error={trending.error} retry={trending.reload} /> : !trending.data ? <Loading /> :
+        {trending.error ? <ErrorBox error={trending.error} retry={trending.reload} /> : !trending.data ? (
+          // placeholders the size of the real cards, so the restaurant list below does not jump when they arrive
+          <>
+            <Loading />
+            <ol className="trending" aria-hidden="true">
+              {Array.from({ length: 6 }, (_, i) => <li key={i} className="card trending-placeholder" />)}
+            </ol>
+          </>
+        ) :
           trending.data.length === 0 ? <p className="muted">{t('home.trendingEmpty')}</p> : (
             <ol className="trending">
               {trending.data.map((d) => (
@@ -87,7 +95,9 @@ export function Home() {
         <h2 id="restaurants">{deliverTo ? t('home.restaurantsNear', { place: deliverTo.label }) : t('home.restaurants')}</h2>
         {restaurants.error ? <ErrorBox error={restaurants.error} retry={restaurants.reload} /> : !restaurants.data ? <Loading /> : (
           <ul className={`grid${restaurants.loading ? ' stale' : ''}`} aria-busy={restaurants.loading}>
-            {restaurants.data.map((r, i) => <RestaurantCard key={r.id} r={r} eager={i < 2} />)}
+            {/* lazy, not eager: on a phone the grid starts below the hero, cuisines and trending sections, and
+                high-priority photos there competed with the page's own resources (Lighthouse LCP 4.3 s) */}
+            {restaurants.data.map((r) => <RestaurantCard key={r.id} r={r} />)}
           </ul>
         )}
       </section>
