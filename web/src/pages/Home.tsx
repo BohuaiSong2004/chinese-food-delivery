@@ -1,10 +1,11 @@
 import { Link, useNavigate } from 'react-router';
-import { useState } from 'react';
 import { useFetch } from '../lib/useFetch';
+import { useAuth } from '../lib/auth';
+import { SearchCombobox } from '../components/SearchCombobox';
 import { useI18n } from '../lib/i18n';
 import { money, time } from '../lib/format';
 import { km, useDeliverTo } from '../lib/location';
-import type { RestaurantView, TrendingDish } from '../lib/types';
+import type { PastDish, RestaurantView, TrendingDish } from '../lib/types';
 import { ErrorBox, Loading, Names } from '../components/bits';
 import { Photo } from '../components/DishImage';
 import { Stars } from '../components/Stars';
@@ -41,8 +42,9 @@ export function RestaurantCard({ r, eager = false }: { r: RestaurantView; eager?
 export function Home() {
   const { t, label } = useI18n();
   const navigate = useNavigate();
-  const [q, setQ] = useState('');
+  const { user } = useAuth();
   const { query, deliverTo } = useDeliverTo();
+  const again = useFetch<PastDish[]>(user?.role === 'CUSTOMER' ? `/api/me/reorder${query ? `?${query}` : ''}` : null);
   const restaurants = useFetch<RestaurantView[]>(`/api/restaurants${query ? `?${query}` : ''}`);
   const trending = useFetch<TrendingDish[]>('/api/trending?limit=6');
 
@@ -51,14 +53,24 @@ export function Home() {
       <section className="hero">
         <h1>{t('home.title')}</h1>
         <p>{t('home.subtitle')}</p>
-        <form role="search" method="get" action="/search" className="search-form"
-          onSubmit={(e) => { e.preventDefault(); navigate(`/search?q=${encodeURIComponent(q)}`); }}>
-          <label htmlFor="home-q" className="visually-hidden">{t('home.searchLabel')}</label>
-          <input id="home-q" name="q" type="search" value={q} onChange={(e) => setQ(e.target.value)}
-            placeholder={t('home.searchPlaceholder')} autoComplete="off" />
-          <button type="submit">{t('home.searchButton')}</button>
-        </form>
+        <SearchCombobox id="home-q" label={t('home.searchLabel')} placeholder={t('home.searchPlaceholder')}
+          button={t('home.searchButton')} onSearch={(q) => navigate(q ? `/search?q=${encodeURIComponent(q)}` : '/search')} />
       </section>
+
+      {again.data && again.data.length > 0 && (
+        <section aria-labelledby="order-again">
+          <h2 id="order-again">{t('home.orderAgain')}</h2>
+          <ol className="trending">
+            {again.data.map((d) => (
+              <li key={d.dishId} className="card">
+                <Link to={`/r/${d.restaurantSlug}#dish-${d.dishId}`}><Names o={d} /></Link>
+                <p className="muted">{d.restaurantName} · {money(d.priceCents)}</p>
+                <p className="muted">{t('home.orderedTimes', { n: d.times })}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       <section aria-labelledby="cuisines">
         <h2 id="cuisines">{t('home.cuisines')}</h2>

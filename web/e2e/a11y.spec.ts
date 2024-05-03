@@ -19,6 +19,14 @@ for (const path of ['/', '/search?q=noodles', '/r/midnight-congee', '/r/chengdu-
   });
 }
 
+test('no WCAG 2.1 AA violations with the suggestion list open @mobile', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('combobox', { name: 'Search dishes' }).fill('dump');
+  await expect(page.getByRole('listbox', { name: 'Suggestions' }).getByRole('option').first()).toBeVisible();
+  await page.getByRole('combobox', { name: 'Search dishes' }).press('ArrowDown');
+  await audit(page);
+});
+
 test('no WCAG 2.1 AA violations in the kitchen and rider consoles', async ({ page }) => {
   await signIn(page, 'merchant@example.com');
   await page.goto('/kitchen');
