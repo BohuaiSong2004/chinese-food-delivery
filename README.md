@@ -195,3 +195,5 @@ docker run --rm --network host -v "$PWD/loadtest:/lt" grafana/k6:2.4.0 run /lt/s
 ## License
 
 MIT
+
+<!-- minor clarity note -->
