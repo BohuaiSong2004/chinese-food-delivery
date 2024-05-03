@@ -74,6 +74,8 @@ public class SearchIndexer implements OutboxHandler {
     private final boolean reindexOnStartup;
     private final Clock clock;
     private final AtomicBoolean ready = new AtomicBoolean();
+    /** A little before this process started: the catch-up window for events dropped while not ready. */
+    private final Instant startedAt;
     private final tools.jackson.databind.ObjectMapper json = tools.jackson.databind.json.JsonMapper.builder().build();
 
     public SearchIndexer(ElasticsearchClient es, JdbcClient db, DataSource dataSource, CatalogRepository catalog,
@@ -85,6 +87,7 @@ public class SearchIndexer implements OutboxHandler {
         this.alias = props.search().indexAlias();
         this.reindexOnStartup = props.search().reindexOnStartup();
         this.clock = clock;
+        this.startedAt = clock.instant().minus(java.time.Duration.ofMinutes(1));
     }
 
     public String alias() { return alias; }
@@ -113,8 +116,11 @@ public class SearchIndexer implements OutboxHandler {
 
     @Override
     public void handle(String topic, String aggregateId, JsonNode payload) throws IOException {
-        if (!ready.get() && !aliasExists()) {
-            return; // the full build will pick this change up
+        if (!ready.get()) {
+            // Not ready yet (starting, or rebuilding after a mapping change, when the old index would
+            // refuse the new fields): the build, or the catch-up when this replica becomes ready,
+            // re-reads everything changed since startup, so this event can be dropped.
+            return;
         }
         if (Outbox.DISH_CHANGED.equals(topic)) {
             index(docs("where d.id = ?", payload.get("dishId").asLong()));
@@ -153,7 +159,11 @@ public class SearchIndexer implements OutboxHandler {
                 long esCount = es.count(c -> c.index(alias)).count();
                 String live = liveMappingHash();
                 if (esCount == dbCount && mappingHash().equals(live)) {
-                    ready.set(true);
+                    if (!ready.get()) {
+                        // Changes dropped while not ready (see handle) are re-read before serving from the index.
+                        index(docs("where d.updated_at >= ? or r.updated_at >= ?", java.sql.Timestamp.from(startedAt)));
+                        ready.set(true);
+                    }
                     return;
                 }
                 if (!mappingHash().equals(live)) {

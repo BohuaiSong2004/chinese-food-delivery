@@ -59,7 +59,12 @@ export function setup() {
   // prepare.sh set the scarce dish (Shrimp & Pork Soup Dumplings) to exactly LIMITED_STOCK baskets.
   const scarceId = http.get(`${BASE}/api/search?q=${encodeURIComponent('虾仁鲜肉小笼包')}&size=1`).json().hits[0].dishId;
   const customers = [];
-  for (let i = 1; i <= VUS; i++) customers.push(signIn(`loadtest+${i}@example.com`));
+  for (let i = 1; i <= VUS; i++) {
+    const token = signIn(`loadtest+${i}@example.com`);
+    // the seeder gives every load-test customer a saved address in Alhambra (in range of both kitchens)
+    const addressId = http.get(`${BASE}/api/me/addresses`, auth(token)).json()[0].id;
+    customers.push({ token, addressId });
+  }
   const before = http.get(`${BASE}/api/admin/stats`, auth(signIn('admin@example.com'))).json();
   return { merchant, riders, restaurants, scarceId, customers, deadlocksBefore: before.deadlocks };
 }
@@ -91,7 +96,7 @@ function transition(token, url, version, expect = 200) {
 
 export default function (data) {
   const i = (__ENV.RATE ? exec.scenario.iterationInTest : exec.vu.idInTest - 1) % data.customers.length;
-  const customer = data.customers[i];
+  const { token: customer, addressId } = data.customers[i];
   const r = data.restaurants[i % 2];
   const items = [];
   if (i % 2 === 0) items.push({ dishId: data.scarceId, quantity: 1 }); // half the crowd wants the scarce dish
@@ -102,7 +107,7 @@ export default function (data) {
   // A well-behaved client: on 503 it waits Retry-After and resends with the SAME Idempotency-Key,
   // so a retry can never create a second order.
   const key = `peak-${Date.now()}-${i}`;
-  const body = JSON.stringify({ restaurantId: r.id, items: merged, deliveryAddress: `${i} Load Test Ave` });
+  const body = JSON.stringify({ restaurantId: r.id, items: merged, addressId });
   const started = Date.now();
   let res;
   for (let attempt = 0; attempt < 6; attempt++) {
