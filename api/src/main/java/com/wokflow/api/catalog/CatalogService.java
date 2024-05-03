@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +29,7 @@ public class CatalogService {
 
     private final CatalogRepository repo;
     private final StringRedisTemplate redis;
+    private final com.wokflow.api.common.RedisBreaker breaker;
     private final ObjectMapper json;
     private final HotMenuService hot;
     private final com.wokflow.api.images.ImageService images;
@@ -38,7 +40,8 @@ public class CatalogService {
 
     public CatalogService(CatalogRepository repo, StringRedisTemplate redis, ObjectMapper json, HotMenuService hot,
                           Clock clock, MeterRegistry meters, com.wokflow.api.images.ImageService images,
-                          com.wokflow.api.geo.DeliveryPricing pricing) {
+                          com.wokflow.api.geo.DeliveryPricing pricing, com.wokflow.api.common.RedisBreaker breaker) {
+        this.breaker = breaker;
         this.images = images;
         this.pricing = pricing;
         this.repo = repo;
@@ -100,22 +103,15 @@ public class CatalogService {
 
     CachedMenu cachedMenu(long restaurantId) {
         String key = menuKey(restaurantId, repo.menuVersion(restaurantId));
-        try {
-            String hit = redis.opsForValue().get(key);
-            if (hit != null) {
-                hits.increment();
-                return json.readValue(hit, CachedMenu.class);
-            }
-        } catch (RuntimeException e) {
-            log.warn("Menu cache read failed, using Postgres: {}", e.toString());
+        Optional<String> hit = breaker.call("menu cache read", () -> redis.opsForValue().get(key));
+        if (hit.isPresent()) {
+            hits.increment();
+            return json.readValue(hit.get(), CachedMenu.class);
         }
         misses.increment();
         CachedMenu fresh = load(restaurantId);
-        try {
-            redis.opsForValue().set(key, json.writeValueAsString(fresh), MENU_TTL);
-        } catch (RuntimeException e) {
-            log.warn("Menu cache write failed: {}", e.toString());
-        }
+        String body = json.writeValueAsString(fresh);
+        breaker.run("menu cache write", () -> redis.opsForValue().set(key, body, MENU_TTL));
         return fresh;
     }
 

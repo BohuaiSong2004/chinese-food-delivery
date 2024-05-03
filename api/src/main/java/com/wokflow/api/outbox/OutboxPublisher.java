@@ -41,6 +41,8 @@ public class OutboxPublisher implements SmartLifecycle {
 
     record Row(long id, String topic, String aggregateId, String payload, int attempts) {}
 
+    private final com.wokflow.api.common.RedisBreaker redisBreaker;
+
     private final JdbcClient db;
     private final TransactionTemplate tx;
     private final ObjectMapper json;
@@ -57,7 +59,9 @@ public class OutboxPublisher implements SmartLifecycle {
     private Thread worker;
 
     public OutboxPublisher(JdbcClient db, TransactionTemplate tx, ObjectMapper json, List<OutboxHandler> all,
-                           DataSourceProperties dataSource, AppProperties props, Clock clock, MeterRegistry meters) {
+                           DataSourceProperties dataSource, AppProperties props, Clock clock, MeterRegistry meters,
+                           com.wokflow.api.common.RedisBreaker redisBreaker) {
+        this.redisBreaker = redisBreaker;
         this.db = db;
         this.tx = tx;
         this.json = json;
@@ -162,7 +166,22 @@ public class OutboxPublisher implements SmartLifecycle {
                     .query((rs, i) -> new Row(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getInt(5)))
                     .list();
             List<Long> done = new ArrayList<>();
+            // A topic whose handler just failed (its store is down or hanging) is not tried again in this
+            // batch: without this, one frozen dependency made every queued event wait out its own timeout,
+            // and events for healthy stores waited behind them.
+            Map<String, String> failedTopics = new HashMap<>();
             for (Row r : rows) {
+                String earlier = failedTopics.get(r.topic());
+                if (earlier != null) {
+                    hold(r, "skipped: " + earlier);
+                    continue;
+                }
+                List<OutboxHandler> hs = handlers.getOrDefault(r.topic(), List.of());
+                boolean redis = hs.stream().anyMatch(OutboxHandler::usesRedis);
+                if (redis && redisBreaker.isOpen()) {
+                    hold(r, "held: Redis unavailable");
+                    continue;
+                }
                 try {
                     JsonNode payload = json.readTree(r.payload());
                     for (OutboxHandler h : handlers.getOrDefault(r.topic(), List.of())) {
@@ -171,12 +190,12 @@ public class OutboxPublisher implements SmartLifecycle {
                     done.add(r.id());
                 } catch (Exception e) {
                     failures.increment();
-                    long backoff = Math.min(60_000L, 250L << Math.min(r.attempts(), 8));
                     log.warn("Outbox event {} ({}) failed, attempt {}: {}", r.id(), r.topic(), r.attempts() + 1, e.toString());
-                    db.sql("""
-                            update outbox set attempts = attempts + 1, last_error = ?,
-                                   next_attempt_at = now() + make_interval(secs => ?) where id = ?""")
-                            .params(truncate(e.toString()), backoff / 1000.0, r.id()).update();
+                    failedTopics.put(r.topic(), e.toString());
+                    if (redis && com.wokflow.api.common.RedisBreaker.isOutage(e)) {
+                        redisBreaker.trip("outbox " + r.topic(), e);
+                    }
+                    defer(r, e.toString());
                 }
             }
             if (!done.isEmpty()) {
@@ -186,6 +205,20 @@ public class OutboxPublisher implements SmartLifecycle {
             return rows.size();
         });
         return n == null ? 0 : n;
+    }
+
+    /** Not attempted (its store is known to be down): try again shortly, without growing the backoff. */
+    private void hold(Row r, String reason) {
+        db.sql("update outbox set last_error = ?, next_attempt_at = now() + interval '1 second' where id = ?")
+                .params(truncate(reason), r.id()).update();
+    }
+
+    private void defer(Row r, String error) {
+        long backoff = Math.min(60_000L, 250L << Math.min(r.attempts(), 8));
+        db.sql("""
+                update outbox set attempts = attempts + 1, last_error = ?,
+                       next_attempt_at = now() + make_interval(secs => ?) where id = ?""")
+                .params(truncate(error), backoff / 1000.0, r.id()).update();
     }
 
     /** Waits until every event written so far has been delivered (used by tests and the load-test verifier). */

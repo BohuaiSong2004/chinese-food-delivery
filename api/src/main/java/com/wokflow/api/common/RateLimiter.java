@@ -39,10 +39,12 @@ public class RateLimiter {
             """, List.class);
 
     private final StringRedisTemplate redis;
+    private final RedisBreaker breaker;
     private final Clock clock;
     private final boolean enabled;
 
-    public RateLimiter(StringRedisTemplate redis, Clock clock, AppProperties props) {
+    public RateLimiter(StringRedisTemplate redis, Clock clock, AppProperties props, RedisBreaker breaker) {
+        this.breaker = breaker;
         this.redis = redis;
         this.clock = clock;
         this.enabled = props.rateLimit().enabled();
@@ -74,11 +76,7 @@ public class RateLimiter {
         }
         long slot = clock.millis() / window.toMillis();
         String base = "rl:" + name + ":" + subject + ":";
-        try {
-            redis.delete(List.of(base + slot, base + (slot - 1)));
-        } catch (RuntimeException e) {
-            log.warn("Rate limiter unavailable, could not clear {}: {}", name, e.toString());
-        }
+        breaker.run("rate limit clear " + name, () -> redis.delete(List.of(base + slot, base + (slot - 1))));
     }
 
     private void run(String name, String subject, int limit, Duration window, String mode) {
@@ -90,14 +88,9 @@ public class RateLimiter {
         long slot = now / size;
         double elapsed = (now % size) / (double) size;
         String base = "rl:" + name + ":" + subject + ":";
-        List<?> res;
-        try {
-            res = redis.execute(SCRIPT, List.of(base + slot, base + (slot - 1)),
-                    Integer.toString(limit), Double.toString(1.0 - elapsed), Long.toString(size * 2), mode);
-        } catch (RuntimeException e) {
-            log.warn("Rate limiter unavailable, allowing request: {}", e.toString());
-            return;
-        }
+        // fails open: with Redis gone, requests are allowed rather than refused
+        List<?> res = breaker.call("rate limit " + name, () -> redis.execute(SCRIPT, List.of(base + slot, base + (slot - 1)),
+                Integer.toString(limit), Double.toString(1.0 - elapsed), Long.toString(size * 2), mode)).orElse(null);
         if (res != null && ((Number) res.get(0)).longValue() == 0) {
             long retry = (long) Math.ceil((size - now % size) / 1000.0);
             throw new RetryableApiException(HttpStatus.TOO_MANY_REQUESTS, "rate_limited",

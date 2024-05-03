@@ -325,6 +325,33 @@ public abstract class IntegrationTest {
 
     public static final String STRIPE_WEBHOOK_SECRET = "whsec_stripe_it";
 
+    public enum Dependency { POSTGRES, REDIS, ELASTICSEARCH }
+
+    /**
+     * Freezes a dependency with docker pause for the duration of body: the port still accepts
+     * connections but nothing answers, which is harsher than a refused connection because every
+     * client has to rely on its timeouts. The container is always resumed.
+     */
+    protected static void whileFrozen(Dependency d, ThrowingRunnable body) throws Exception {
+        GenericContainer<?> c = switch (d) {
+            case POSTGRES -> POSTGRES;
+            case REDIS -> REDIS;
+            case ELASTICSEARCH -> ES;
+        };
+        var docker = org.testcontainers.DockerClientFactory.instance().client();
+        docker.pauseContainerCmd(c.getContainerId()).exec();
+        try {
+            body.run();
+        } finally {
+            docker.unpauseContainerCmd(c.getContainerId()).exec();
+        }
+    }
+
+    @FunctionalInterface
+    public interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
     protected Http.Res webhook(String eventId, String type, UUID orderId) {
         return webhook(eventId, type, FakePaymentProvider.intentId(orderId), clock.instant().getEpochSecond(), WEBHOOK_SECRET);
     }

@@ -16,7 +16,7 @@ class RateLimiterIT extends IntegrationTest {
     StringRedisTemplate redis;
 
     RateLimiter enabled() {
-        return new RateLimiter(redis, clock, com.wokflow.api.support.TestProps.rateLimit(true));
+        return new RateLimiter(redis, clock, com.wokflow.api.support.TestProps.rateLimit(true), new RedisBreaker());
     }
 
     @Test
@@ -76,7 +76,7 @@ class RateLimiterIT extends IntegrationTest {
 
     @Test
     void disabledLimiterNeverRefuses() {
-        var off = new RateLimiter(redis, clock, com.wokflow.api.support.TestProps.rateLimit(false));
+        var off = new RateLimiter(redis, clock, com.wokflow.api.support.TestProps.rateLimit(false), new RedisBreaker());
         for (int i = 0; i < 20; i++) {
             off.check("d", "x", 1, Duration.ofMinutes(1));
         }

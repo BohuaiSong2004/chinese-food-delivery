@@ -90,3 +90,22 @@ Alertmanager is wired up, because there is nobody to page for a local stack.
 Not included: distributed tracing. Each request is already one service plus its data stores,
 and the slow paths are visible in the per-route histograms; an OpenTelemetry exporter is the
 next step if a second service appears.
+
+## When a dependency fails
+
+Measured by `FaultIT`, which freezes each container with `docker pause` (the port still accepts
+connections but nothing answers, so every client has to rely on its timeouts; this is harsher
+than a stopped container). Numbers from one local run.
+
+| Frozen | What customers see | How |
+|---|---|---|
+| Elasticsearch | Search keeps answering from Postgres (`degraded: true`, no pinyin or facets). First search 1.5 s, then ~15 ms. Back on Elasticsearch once it answers. | 1.5 s budget per query on a virtual thread; a timeout or I/O error opens a 10 s breaker, which closes early if the abandoned query completes. An error *returned* by Elasticsearch (e.g. index being rebuilt) only affects that request. |
+| Redis | Menus, ordering, payment and sign-in keep working. The first menu request waits 2.1 s, later ones ~15 ms. No rate limits (fail open), no hot-dish list, no menu cache. | `RedisBreaker`: after one failure, optional Redis calls are skipped for 5 s. |
+| Redis (events) | Live status, rider offers and hot-dish counts are held, then delivered 1–5 s after Redis returns. Search indexing carries on meanwhile (a dish change was indexed in 1.8 s while 20 live events waited). | Outbox: a failing topic is not retried within the same batch, Redis-bound topics are held while the breaker is open, and held events do not grow their backoff. |
+| Postgres | Requests fail with `503` and `Retry-After` in 6–10 s instead of hanging. Readiness turns `503` (the replica leaves the load balancer); liveness stays `200` (no restart loop). Recovers by itself. | Hikari validation timeout 2 s, connect timeout 3 s, socket timeout 10 s; readiness includes the `db` check. |
+| MockPay | Orders are created; the payment page link is retried on the next visit; refunds retry with backoff. | `OrderFlowIT` (provider-down cases). |
+
+Shutdown: the API closes every live stream as soon as it starts shutting down, so browsers
+reconnect to another replica and resume from their Last-Event-ID. Stopping a replica that held
+10 of 20 open streams took 0.7 s (before: Tomcat waited for the streams until Docker killed it
+at 10 s).

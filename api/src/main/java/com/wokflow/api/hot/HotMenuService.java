@@ -64,12 +64,15 @@ public class HotMenuService {
             """, List.class);
 
     private final StringRedisTemplate redis;
+    private final com.wokflow.api.common.RedisBreaker breaker;
     private final JdbcClient db;
     private final Clock clock;
     private final int windowHours;
     private final int topN;
 
-    public HotMenuService(StringRedisTemplate redis, JdbcClient db, Clock clock, AppProperties props) {
+    public HotMenuService(StringRedisTemplate redis, JdbcClient db, Clock clock, AppProperties props,
+                          com.wokflow.api.common.RedisBreaker breaker) {
+        this.breaker = breaker;
         this.redis = redis;
         this.db = db;
         this.clock = clock;
@@ -145,13 +148,10 @@ public class HotMenuService {
             keys.add(bucketPrefix + (now - i));
         }
         Map<String, Long> out = new LinkedHashMap<>();
-        try {
-            List<?> flat = redis.execute(TOP, keys, Long.toString(TOP_CACHE.toMillis()), Integer.toString(n));
-            for (int i = 0; flat != null && i + 1 < flat.size(); i += 2) {
-                out.put(flat.get(i).toString(), Math.round(Double.parseDouble(flat.get(i + 1).toString())));
-            }
-        } catch (RuntimeException e) {
-            log.warn("Hot menu read failed: {}", e.toString());
+        List<?> flat = breaker.call("hot menu read",
+                () -> redis.execute(TOP, keys, Long.toString(TOP_CACHE.toMillis()), Integer.toString(n))).orElse(List.of());
+        for (int i = 0; i + 1 < flat.size(); i += 2) {
+            out.put(flat.get(i).toString(), Math.round(Double.parseDouble(flat.get(i + 1).toString())));
         }
         return out;
     }
