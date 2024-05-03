@@ -7,13 +7,13 @@ import { useDeliverTo, km } from '../lib/location';
 import { useFetch } from '../lib/useFetch';
 import { api, ApiError, newIdempotencyKey } from '../lib/api';
 import { money } from '../lib/format';
-import type { MenuView, OrderView } from '../lib/types';
+import type { DishView, MenuView, OrderView, Pairing } from '../lib/types';
 import { Names } from '../components/bits';
 import { AddressForm } from '../components/AddressForm';
 
 export function Cart() {
   const { t, names } = useI18n();
-  const { cart, subtotal, setQuantity, clear } = useCart();
+  const { cart, subtotal, setQuantity, clear, add } = useCart();
   const { user } = useAuth();
   const { deliverTo, addresses, chooseAddress, reloadAddresses } = useDeliverTo();
   const navigate = useNavigate();
@@ -26,6 +26,9 @@ export function Cart() {
   const point = deliverTo ? `?lat=${deliverTo.lat.toFixed(4)}&lng=${deliverTo.lng.toFixed(4)}` : '';
   // The fee is only an estimate here; the server prices the order from the saved address.
   const quote = useFetch<MenuView>(cart && cart.lines.length ? `/api/restaurants/${cart.restaurantSlug}${point}` : null);
+  // sorted, so adding one more of a dish (same set) does not refetch
+  const chosen = cart ? [...new Set(cart.lines.map((l) => l.dishId))].sort((a, b) => a - b) : [];
+  const pairs = useFetch<Pairing[]>(chosen.length ? `/api/restaurants/${cart!.restaurantSlug}/pairings?${chosen.map((id) => `dish=${id}`).join('&')}` : null);
 
   if (!cart || cart.lines.length === 0) {
     return (
@@ -101,6 +104,12 @@ export function Cart() {
       </dl>
       {delivery && delivery.deliverable && <p className="muted">{t('cart.eta', { min: delivery.etaMinutes })}</p>}
       {short > 0 && <p className="notice">{t('cart.belowMin', { amount: money(short) })}</p>}
+      <GoesWith pairs={pairs.data} menu={quote.data} onAdd={(d) => {
+        add({ id: cart.restaurantId, slug: cart.restaurantSlug, name: cart.restaurantName, nameZh: cart.restaurantNameZh,
+          deliveryFeeCents: cart.deliveryFeeCents, minOrderCents: cart.minOrderCents },
+        { dishId: d.id, name: d.name, nameZh: d.nameZh, priceCents: d.priceCents });
+        setKey(newIdempotencyKey());
+      }} />
 
       {!user ? (
         <Link className="button" to="/signin?next=/cart">{t('cart.signInFirst')}</Link>
@@ -140,3 +149,30 @@ export function Cart() {
   );
 }
 
+
+/** Dishes often ordered with what is in the cart, shown only when the menu says they can be ordered now. */
+function GoesWith({ pairs, menu, onAdd }: { pairs: Pairing[] | null; menu: MenuView | null; onAdd: (d: DishView) => void }) {
+  const { t, names } = useI18n();
+  if (!pairs || !menu || !menu.restaurant.acceptingOrders) return null;
+  const dishes = new Map(menu.categories.flatMap((c) => c.dishes).map((d) => [d.id, d]));
+  const shown = pairs.map((p) => dishes.get(p.dishId))
+    .filter((d): d is DishView => d !== undefined && d.available && (!d.limited || (d.stockRemaining ?? 0) > 0));
+  if (!shown.length) return null;
+  return (
+    <section aria-labelledby="goes-with" className="goes-with">
+      <h2 id="goes-with">{t('cart.pairings')}</h2>
+      <ul className="cart-lines">
+        {shown.map((d) => {
+          const [n] = names(d);
+          return (
+            <li key={d.id} className="cart-line">
+              <Names o={d} />
+              <span className="price">{money(d.priceCents)}</span>
+              <button type="button" onClick={() => onAdd(d)} aria-label={t('menu.addLabel', { name: n })}>{t('menu.add')}</button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}

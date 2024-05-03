@@ -4,7 +4,7 @@ import { useFetch } from '../lib/useFetch';
 import { useI18n, type Key } from '../lib/i18n';
 import { api, ApiError } from '../lib/api';
 import { dateTime } from '../lib/format';
-import type { RestaurantReviews, RestaurantStatus } from '../lib/types';
+import type { RestaurantReviews, RestaurantStatus, SearchMiss } from '../lib/types';
 import { ErrorBox, Loading, Names } from '../components/bits';
 import { Stars } from '../components/Stars';
 import { ReviewItem } from './Reviews';
@@ -177,6 +177,7 @@ function Operations() {
   const audit = useFetch<Record<string, number | boolean>>('/api/admin/ledger/audit');
   const stats = useFetch<{ deadlocks: number; outboxPending: number; ordersByStatus: Record<string, number>[] }>('/api/admin/stats');
   const log = useFetch<AuditEntry[]>('/api/admin/audit?limit=30');
+  const misses = useFetch<SearchMiss[]>('/api/admin/search-misses?limit=30');
   const [msg, setMsg] = useState<string | null>(null);
   return (
     <>
@@ -205,6 +206,21 @@ function Operations() {
           api('/api/admin/search/reindex', { method: 'POST' }).then(() => setMsg(t('admin.reindexed'))).catch((e) => setMsg(message(e)));
         }}>{t('admin.reindex')}</button>
         {msg && <p role="status" className="muted">{msg}</p>}
+      </section>
+      <section aria-labelledby="misses-title">
+        <h2 id="misses-title">{t('admin.misses')}</h2>
+        {misses.error ? <ErrorBox error={misses.error} retry={misses.reload} /> : !misses.data ? <Loading /> :
+          misses.data.length === 0 ? <p className="muted">{t('admin.missesEmpty')}</p> : (
+            <>
+              <p className="muted">{t('admin.missesHint')}</p>
+              <table>
+                <thead><tr><th scope="col">{t('admin.missQuery')}</th><th scope="col">{t('admin.missCount')}</th><th scope="col">{t('admin.missLast')}</th></tr></thead>
+                <tbody>{misses.data.map((m) => (
+                  <tr key={m.query}><td><Link to={`/search?q=${encodeURIComponent(m.query)}`}>{m.query}</Link></td><td>{m.misses}</td><td>{dateTime(m.lastSeen, lang)}</td></tr>
+                ))}</tbody>
+              </table>
+            </>
+          )}
       </section>
       <section aria-labelledby="audit-title">
         <h2 id="audit-title">{t('admin.auditLog')}</h2>

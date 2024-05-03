@@ -21,10 +21,27 @@ export interface TrendingDish {
 export interface DishHit {
   dishId: number; name: string; nameZh: string; description: string; priceCents: number; tags: string[]; spiceLevel: number;
   restaurantId: number; restaurantSlug: string; restaurantName: string; restaurantNameZh: string; cuisine: string;
-  acceptingOrders: boolean; image?: string; distanceM?: number;
+  acceptingOrders: boolean; image?: string; distanceM?: number; rating?: number;
+  /** The matched words, wrapped in U+E000 … U+E001 (see lib/highlight). Absent when nothing visible matched. */
+  highlight?: { name?: string; nameZh?: string; description?: string };
 }
 export interface Facet { value: string; count: number }
-export interface SearchResult { total: number; hits: DishHit[]; facets: Record<string, Facet[]>; degraded: boolean }
+export interface SearchResult {
+  total: number; hits: DishHit[]; facets: Record<string, Facet[]>; degraded: boolean;
+  /** Nothing matched every word; these hits match some of them. */
+  relaxed?: boolean;
+  /** Filters left nothing: how many dishes match the words without them. */
+  withoutFilters?: number;
+}
+export type SearchSort = 'relevance' | 'price' | 'rating' | 'distance';
+export interface RestaurantSuggestion { slug: string; name: string; nameZh: string; cuisine: string; image?: string }
+export interface Suggestions { dishes: DishHit[]; restaurants: RestaurantSuggestion[]; degraded: boolean }
+export interface SearchMiss { query: string; misses: number; firstSeen: string; lastSeen: string }
+export interface Pairing { dishId: number; together: number; score: number }
+export interface PastDish {
+  dishId: number; name: string; nameZh: string; priceCents: number; image?: string; times: number; lastOrderedAt: string;
+  restaurantId: number; restaurantSlug: string; restaurantName: string; restaurantNameZh: string; acceptingOrders: boolean;
+}
 
 export interface OrderLine { dishId: number; name: string; nameZh: string; unitPriceCents: number; quantity: number }
 export interface OrderStep { version: number; status: OrderStatus; at: string; note?: string }

@@ -1,10 +1,11 @@
 import { Link, useSearchParams } from 'react-router';
-import { useState } from 'react';
 import { useFetch } from '../lib/useFetch';
 import { useI18n } from '../lib/i18n';
 import { money } from '../lib/format';
-import type { SearchResult } from '../lib/types';
+import type { DishHit, SearchResult, SearchSort, TrendingDish } from '../lib/types';
 import { ErrorBox, Loading, Names, Spice, Tags } from '../components/bits';
+import { SearchCombobox } from '../components/SearchCombobox';
+import { Marked } from '../lib/highlight';
 import { CUISINES } from './Home';
 import { Photo } from '../components/DishImage';
 import { km, useDeliverTo } from '../lib/location';
@@ -19,13 +20,18 @@ export function Search() {
   const cuisine = params.get('cuisine') ?? '';
   const maxSpice = params.get('maxSpice') ?? '';
   const { deliverTo } = useDeliverTo();
+  // distance only makes sense with a delivery point; an old link with sort=distance falls back to best match
+  const sort = ((s) => (s === 'distance' && !deliverTo ? 'relevance' : s))((params.get('sort') ?? 'relevance') as SearchSort);
   const query = new URLSearchParams(params);
   query.set('size', '30');
+  if (sort === 'relevance') query.delete('sort'); else query.set('sort', sort);
   if (deliverTo) { // only dishes from kitchens that deliver to the chosen place
     query.set('lat', deliverTo.lat.toFixed(4));
     query.set('lng', deliverTo.lng.toFixed(4));
   }
   const res = useFetch<SearchResult>(`/api/search?${query.toString()}`);
+  const nothing = res.data !== null && !res.loading && res.data.hits.length === 0;
+  const popular = useFetch<TrendingDish[]>(nothing ? '/api/trending?limit=6' : null);
   const counts = new Map((res.data?.facets.tags ?? []).map((f) => [f.value, f.count]));
 
   const update = (fn: (p: URLSearchParams) => void) => {
@@ -37,7 +43,8 @@ export function Search() {
   return (
     <div className="search-page">
       <h1>{t('search.title')}</h1>
-      <SearchBox key={q} initial={q} onSearch={(text) => update((p) => (text ? p.set('q', text) : p.delete('q')))} />
+      <SearchCombobox key={q} id="q" initial={q} label={t('search.label')} placeholder={t('search.label')} button={t('home.searchButton')}
+        onSearch={(text) => update((p) => (text ? p.set('q', text) : p.delete('q')))} />
 
       <div className="search-layout">
         <aside aria-labelledby="filters">
@@ -75,20 +82,40 @@ export function Search() {
           {res.error ? <ErrorBox error={res.error} retry={res.reload} /> : !res.data ? <Loading /> : (
             <>
               {res.data.degraded && <p className="notice">{t('search.degraded')}</p>}
-              <p className="muted">{t('search.results', { n: res.data.total })}{deliverTo ? ` · ${t('search.deliveringTo', { place: deliverTo.label })}` : ''}</p>
-              {res.data.hits.length === 0 ? <p>{t('search.none')}</p> : (
+              <div className="results-bar">
+                <p className="muted">{t('search.results', { n: res.data.total })}{deliverTo ? ` · ${t('search.deliveringTo', { place: deliverTo.label })}` : ''}</p>
+                <label className="sort">
+                  {t('search.sort')}{' '}
+                  <select value={sort} onChange={(e) => update((p) => (e.target.value === 'relevance' ? p.delete('sort') : p.set('sort', e.target.value)))}>
+                    <option value="relevance">{t('search.sortRelevance')}</option>
+                    <option value="price">{t('search.sortPrice')}</option>
+                    <option value="rating">{t('search.sortRating')}</option>
+                    {deliverTo && <option value="distance">{t('search.sortDistance')}</option>}
+                  </select>
+                </label>
+              </div>
+              {res.data.relaxed && <p className="notice">{t('search.relaxed', { q })}</p>}
+              {res.data.hits.length === 0 ? (
+                <>
+                  <p>{t('search.none')}</p>
+                  {res.data.withoutFilters ? (
+                    <p><button type="button" className="link-button" onClick={() => setParams(q ? { q } : {}, { replace: true })}>
+                      {t('search.withoutFilters', { n: res.data.withoutFilters })}</button></p>
+                  ) : null}
+                  {popular.data && popular.data.length > 0 && (
+                    <section aria-labelledby="popular-instead">
+                      <h2 id="popular-instead">{t('search.popular')}</h2>
+                      <ul className="chips">
+                        {popular.data.map((d) => (
+                          <li key={d.dishId}><Link className="chip" to={`/r/${d.restaurantSlug}#dish-${d.dishId}`}><Names o={d} /></Link></li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+                </>
+              ) : (
                 <ul className="results">
-                  {res.data.hits.map((h) => (
-                    <li key={h.dishId} className="card dish-hit">
-                      <Photo base={h.image} sizes="7rem" className="thumb" />
-                      <div>
-                        <h3><Link to={`/r/${h.restaurantSlug}#dish-${h.dishId}`}><Names o={h} /></Link> <Spice level={h.spiceLevel} /></h3>
-                        <p className="muted">{t('search.at', { name: h.restaurantName })} · {money(h.priceCents)}{h.distanceM !== undefined ? ` · ${km(h.distanceM)}` : ''}</p>
-                        <p>{h.description}</p>
-                        <Tags tags={h.tags} />
-                      </div>
-                    </li>
-                  ))}
+                  {res.data.hits.map((h) => <Result key={h.dishId} h={h} />)}
                 </ul>
               )}
             </>
@@ -99,16 +126,27 @@ export function Search() {
   );
 }
 
-/** Keyed by the query in the URL, so back/forward resets the box without syncing state in an effect. */
-function SearchBox({ initial, onSearch }: { initial: string; onSearch: (q: string) => void }) {
-  const { t } = useI18n();
-  const [text, setText] = useState(initial);
+function Result({ h }: { h: DishHit }) {
+  const { t, lang } = useI18n();
+  const zhFirst = lang === 'zh';
+  const first = zhFirst ? h.nameZh : h.name;
+  const second = zhFirst ? h.name : h.nameZh;
   return (
-    <form role="search" className="search-form" method="get" action="/search"
-      onSubmit={(e) => { e.preventDefault(); onSearch(text.trim()); }}>
-      <label htmlFor="q" className="visually-hidden">{t('search.label')}</label>
-      <input id="q" name="q" type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder={t('search.label')} />
-      <button type="submit">{t('home.searchButton')}</button>
-    </form>
+    <li className="card dish-hit">
+      <Photo base={h.image} sizes="7rem" className="thumb" />
+      <div>
+        <h3>
+          <Link to={`/r/${h.restaurantSlug}#dish-${h.dishId}`}>
+            <span className="names">
+              <span lang={zhFirst ? 'zh-CN' : 'en'}><Marked text={first} highlighted={zhFirst ? h.highlight?.nameZh : h.highlight?.name} /></span>{' '}
+              <span className="secondary" lang={zhFirst ? 'en' : 'zh-CN'}><Marked text={second} highlighted={zhFirst ? h.highlight?.name : h.highlight?.nameZh} /></span>
+            </span>
+          </Link> <Spice level={h.spiceLevel} />
+        </h3>
+        <p className="muted">{t('search.at', { name: h.restaurantName })} · {money(h.priceCents)}{h.distanceM !== undefined ? ` · ${km(h.distanceM)}` : ''}</p>
+        <p><Marked text={h.description} highlighted={h.highlight?.description} /></p>
+        <Tags tags={h.tags} />
+      </div>
+    </li>
   );
 }
