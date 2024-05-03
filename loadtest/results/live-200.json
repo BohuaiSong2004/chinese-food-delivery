@@ -1,16 +1,15 @@
-200 streams connected
 {
   "streams": 200,
-  "driveSeconds": "5.0",
-  "eventsReceived": 1199,
+  "driveSeconds": "11.0",
+  "eventsReceived": 1200,
   "expectedEvents": 1200,
   "latencyMs": {
-    "p50": 227,
-    "p95": 538,
-    "p99": 844,
-    "max": 1187
+    "p50": 797,
+    "p95": 1973,
+    "p99": 2869,
+    "max": 3441
   },
   "clientsEndingOnDelivered": 200,
   "versionRegressions": 0,
-  "duplicateOrOlderEventsIgnored": 1
+  "duplicateOrOlderEventsIgnored": 0
 }

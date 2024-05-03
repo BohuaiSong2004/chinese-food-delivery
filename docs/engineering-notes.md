@@ -22,9 +22,14 @@ the peak-hour load test, CI, or an accessibility/Lighthouse audit, not by readin
    version it showed as `If-Match`, so a stale screen gets 409 instead of acting twice.
 6. **Cancel / reject** returns stock and, if the customer was charged, writes a refund request in the same
    transaction; a worker sends it to the provider with retries and books the REFUND entry on success.
-7. **Everyone sees it**: the outbox publisher (woken by `LISTEN/NOTIFY`, claiming rows with
-   `FOR UPDATE SKIP LOCKED`) publishes to a Redis channel; each replica forwards to its SSE clients; the
-   client keeps the highest version it has seen.
+7. **Everyone sees it**: the outbox publisher (woken in-process right after the commit, peers through a
+   coalesced `NOTIFY`, claiming rows with `FOR UPDATE SKIP LOCKED`) appends each event to one bounded Redis
+   Stream; every replica tails it and forwards to its SSE clients. A client that reconnects sends
+   `Last-Event-ID` and the server replays what it missed from the stream (or sends a fresh snapshot if it
+   was gone too long); the client keeps the highest version it has seen.
+8. **Dispatch**: when the kitchen accepts, the nearest online rider (Redis GEO, positions older than 60 s
+   ignored) gets a 30-second offer; declining or letting it expire moves it to the next rider, and the job
+   board stays open as a fallback. Accepting an offer claims the order in the same transaction.
 
 ## Problems found and fixed
 
@@ -134,12 +139,123 @@ every menu change increments in the same transaction, so an old copy is simply n
 - `Outbox.publish` refuses to run outside a transaction, so an event can never be published for a change
   that then rolls back (`OutboxIT`).
 
+### 12. Every commit waited on the outbox NOTIFY
+
+At 25 orders/s the API was slow while neither JVM was busy (Flight Recorder: ~10% CPU, the time spent in
+socket reads from Postgres). Sampling `pg_stat_activity` showed 37 of 42 active backends in
+`Lock / object` on `COMMIT`. The outbox insert trigger ran `pg_notify` inside every business transaction,
+and Postgres holds a cluster-wide lock from a transaction's NOTIFY until its commit is flushed, so every
+order, payment and status change committed one at a time. The trigger is gone: after commit the API wakes
+its own publisher in-process (it can deliver the row itself, the claim is `SKIP LOCKED`) and sends one
+coalesced `NOTIFY` per 50 ms for the other replicas, outside any business transaction. At 40 orders/s,
+placement p95 went from 8.9 s to 4.5 s and the 503 retries from 35 to 0. What remained were `WALWrite`
+waits; `pg_test_fsync` showed 124 µs per sync, so those were CPU starvation on a two-core box.
+
+### 13. A committed change answered with 503
+
+The 600-order burst left one to four "unexpected" 409s per run, always the same shape: a kitchen
+"ready" refused because the order was *already* READY at the next version. The status change committed,
+then the API loaded the response on a second pooled connection; with the pool exhausted that failed with
+503, the client retried with the same `If-Match`, and the retry lost to its own first attempt. The response
+is now built in the same transaction, and a retry whose expected version was followed by exactly this
+actor's same change returns the current order (a different action, or another rider's claim, is still a
+409). The same idea made order pages one read-only transaction instead of one pool borrow per query
+(time holding a placement slot under the burst: p50 0.28 → 0.12 s, p95 4.6 → 2.2 s).
+
+### 14. The live stream silently skipped events
+
+Moving live updates from pub/sub to a Redis Stream (for replay on reconnect) lost events in the first
+test. `ReadOffset.latest()` re-reads from `$` on every poll, so anything appended between two polls was
+never seen; `lastConsumed()` starts at `$` once and continues from the last id. The second bug: the poll
+blocked for 2 s, exactly the client's command timeout, so every idle poll was an error and the default
+error policy cancelled the subscription. The poll is 1 s and errors no longer cancel it.
+
+### 15. A test helper deadlocked the suite
+
+The full suite hung at random. The helper that gave each test customer an address did an HTTP call inside
+`ConcurrentHashMap.computeIfAbsent`; on Java 21 a virtual thread blocked inside that `synchronized` section
+pins its carrier, and the request handlers it was waiting for needed the same few carriers. It uses a
+per-token `ReentrantLock` now.
+
+### 16. Freezing each dependency (FaultIT)
+
+`docker pause` keeps a port open while nothing answers, so every client falls back on its timeouts. Five
+problems showed up:
+
+- Search waited out the Elasticsearch client's 10 s socket timeout on every query. It now gets a 1.5 s
+  budget and a 10 s breaker (which closes early if the abandoned query completes); an error *returned* by
+  Elasticsearch, such as a missing index during a rebuild, only affects that request.
+- With Redis frozen, one menu page made three optional Redis calls and waited 2 s for each. A breaker skips
+  optional Redis work for 5 s after a failure: first page 2.1 s, then ~15 ms.
+- The outbox retried a failing topic for every queued row, so search indexing waited behind live events
+  that could not be sent. A failing topic is now skipped for the rest of the batch, Redis-bound topics are
+  held while Redis is down, and held events do not grow their backoff (a dish change reached the index in
+  1.8 s while 20 live events waited, instead of 7.7 s).
+- A frozen Postgres held requests forever: there was no JDBC socket timeout. Now 10 s, a 503 with
+  `Retry-After`, and a readiness probe that includes the database (liveness does not, to avoid restart
+  loops).
+- Open SSE streams kept Tomcat's graceful shutdown waiting until Docker killed the container at 10 s. The
+  API now closes every stream when shutdown starts; clients reconnect to the other replica and resume from
+  `Last-Event-ID`. Stopping a replica with 10 open streams: 0.7 s.
+
+### 17. Verifying the same token over and over
+
+In the load window of a Flight Recorder profile, about a quarter of the API's samples were ES256
+signature verification, for tokens each client reuses for 15 minutes. Tokens that pass every check are
+now cached until their own expiry (invalid ones never are). Authenticated requests: 556 → 1,088 req/s,
+API CPU per request 2.6 → 1.0 ms.
+
+### 18. Comparing against yesterday's numbers
+
+Re-running the steady test, placement at 25 orders/s was p50 4.5 s against a documented 15 ms. Before
+hunting a regression, the commit the old numbers came from was built and run on the same VM: it reproduced
+them (14 ms / 71 ms). But it had carried 584 orders through their whole life against today's 850, because
+extra dishes sold out in its seed data, so it was a lighter test. Per delivered order the two builds
+cost the same: Postgres 31 vs 29 ms of CPU, about 160 statements each (`pg_stat_statements`), and less API
+CPU in the new one. Two lessons kept: measure work per unit and not only latency, and burst runs on this
+box vary by ±50% on identical code, so a single run proves nothing. (Building the old commit also
+overwrote the current images, because compose pins their tags; the next start failed in the seeder until
+they were rebuilt.)
+
+### 19. The NOTIFY fix put live events out of order
+
+Re-measuring after story 12, the 200-stream test received 982 of 1,200 events and ignored 109 as
+older than what the client had already shown: a later status had overtaken an earlier one, and when
+DELIVERED overtook PICKED UP the client stopped before the older one arrived. Reading the Redis Stream
+back showed 62 inversions in one run. Since story 12 each replica publishes its own commits at once, so
+an order's ACCEPTED (committed on one replica) and READY (on the other, milliseconds later) were published
+concurrently. The first fix, "claim an event only if no earlier event of its order is unpublished",
+was correct but forced each order's events into separate batches (p50 2.7 s). The version kept: a
+batch handles an order's events in id order, but only up to the first pending event of that order that
+is not in the batch (another replica holds it, or it waits for a retry). The first attempt at that missed
+a gap: another replica could hold v4 while this batch had v3 and v5. Two `OutboxIT` tests pin both cases
+(each fails without the fix), and the stream now reads back with 0 inversions in 1,200 events. With every
+event now going through one publisher per order, Redis round trips became the cost, so a batch's stream
+appends are pipelined: 200-stream p50 2.1 s → 0.8–1.3 s. When an order's steps are spaced like a real
+kitchen's (0.5 s apart), 5 streams see p50 25–45 ms.
+
+### 20. More small ones from this round
+
+- The password-reset e2e passed locally and failed in CI: on a cold cache the sign-in form stayed on screen
+  while the next page's chunk loaded, so the test typed the email into the old form. It waits for the new
+  heading first.
+- `(0.95).toFixed(1)` is `"0.9"` (0.95 is stored as 0.9499…), so 950 m was shown as "0.9 km".
+- A test of restocking used the UTC date as the restaurant's "yesterday" and failed in CI late in the
+  Pacific evening.
+- `List.of(double[][])` spread a polygon's rows as varargs and Elasticsearch rejected the shape.
+- An address form nested inside the checkout form made the browser submit natively (405).
+- nginx `add_header` in a `location` replaces the server's headers, so the page lost its
+  `Permissions-Policy`.
+- Search tests looked for "fried rice" and "xlb", which every test kitchen sells; in a full run the
+  expected dish could fall off the first page.
+
 ## Things deliberately left out
 
 - Access tokens are not revocable before they expire (15 minutes); that is the cost of stateless
   verification. Refresh tokens are revocable. Merchant restaurant scope in a token is likewise up to
   15 minutes stale.
 - The hot-menu union is cached for 15 s, so "popular right now" can lag a paid order by up to 15 s.
-- Redis pub/sub is at-most-once. Clients re-read the order on every (re)connect, and status is always
-  confirmed from Postgres before anything acts on it.
+- The live stream keeps about 20,000 events. A client away longer than that gets a snapshot (or "resync"
+  for list views) instead of a replay; status is always confirmed from Postgres before anything acts on it.
+- No distributed tracing: one service plus its stores, and the per-route histograms show the slow paths.
 - A real payment provider would also need 3-D Secure / SCA handling, partial refunds and disputes.
