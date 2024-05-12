@@ -5,7 +5,7 @@ import type { OrderView, StatusEvent } from './types';
 /**
  * The order, kept current from the SSE stream. Every event and every fetch is
  * compared by version and only ever moves forward, so a late or duplicated
- * event (pub/sub across replicas) can never show an older status.
+ * event (a replay overlapping the live tail) can never show an older status.
  */
 export function useLiveOrder(id: string) {
   const [order, setOrder] = useState<OrderView | null>(null);
@@ -27,6 +27,7 @@ export function useLiveOrder(id: string) {
       onDown: () => setLive(false),
       onEvent: (name, data) => {
         if (name === 'snapshot') apply(JSON.parse(data) as OrderView);
+        if (name === 'resync') void refetch();
         if (name === 'status') {
           const e = JSON.parse(data) as StatusEvent;
           if (e.version > version.current) void refetch();

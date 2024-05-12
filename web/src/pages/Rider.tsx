@@ -4,7 +4,8 @@ import { useLiveRefresh } from '../lib/useLiveList';
 import { useI18n } from '../lib/i18n';
 import { api, ApiError, refreshSession } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { money, shortId } from '../lib/format';
+import { dateTime, money, shortId } from '../lib/format';
+import { usePaged } from '../lib/usePaged';
 import type { OrderView } from '../lib/types';
 import { ErrorBox, Loading, Names, StatusBadge } from '../components/bits';
 
@@ -64,6 +65,7 @@ function RiderConsole() {
           </ul>
         )}
       </section>
+      <RiderHistory />
       <section aria-labelledby="jobs">
         <h2 id="jobs">{t('rider.jobs')}</h2>
         {jobs.error ? <ErrorBox error={jobs.error} retry={jobs.reload} /> : !jobs.data ? <Loading /> : jobs.data.length === 0 ? <p className="muted">{t('rider.noJobs')}</p> : (
@@ -79,6 +81,25 @@ function RiderConsole() {
           </ul>
         )}
       </section>
+    </section>
+  );
+}
+
+function RiderHistory() {
+  const { t, lang, names } = useI18n();
+  const [open, setOpen] = useState(false);
+  const history = usePaged<OrderView>(open ? '/api/rider/orders/history?limit=20' : null);
+  return (
+    <section aria-labelledby="rider-history">
+      <h2 id="rider-history"><button type="button" className="link-button" aria-expanded={open} onClick={() => setOpen(!open)}>{t('rider.history')}</button></h2>
+      {open && (history.error ? <ErrorBox error={history.error} retry={history.reload} /> : !history.items ? <Loading /> : (
+        <>
+          <ul className="done-list">
+            {history.items.map((o) => <li key={o.id}>{dateTime(o.createdAt, lang)} · #{shortId(o.id)} · {names(o.restaurant)[0]} · {money(o.deliveryFeeCents)} <StatusBadge status={o.status} /></li>)}
+          </ul>
+          {history.hasMore && <button type="button" className="secondary-button load-more" disabled={history.busy} onClick={() => void history.more()}>{t('common.more')}</button>}
+        </>
+      ))}
     </section>
   );
 }

@@ -19,34 +19,100 @@ import tools.jackson.databind.JsonNode;
 
 class LiveIT extends IntegrationTest {
 
-    /** Collects SSE "event: name" + "data:" pairs in a background thread. */
-    record Stream(List<String> events, Thread reader) {
+    /** Collects SSE "event: name" + "data:" pairs (and the last event id) in a background thread. */
+    record Stream(List<String> events, Thread reader, java.util.concurrent.atomic.AtomicReference<String> lastId,
+                  java.io.InputStream body) {
         List<String> statuses() { return events.stream().filter(e -> e.startsWith("status:")).map(e -> e.substring(7)).toList(); }
+
+        void close() throws Exception {
+            body.close();
+            reader.join(2000);
+        }
     }
 
     Stream open(String path, String token) throws Exception {
-        HttpRequest req = HttpRequest.newBuilder(URI.create(http.base() + path)).header("Authorization", "Bearer " + token)
-                .header("Accept", "text/event-stream").build();
-        HttpResponse<java.io.InputStream> res = HttpClient.newHttpClient().send(req, HttpResponse.BodyHandlers.ofInputStream());
+        return open(path, token, null);
+    }
+
+    Stream open(String path, String token, String lastEventId) throws Exception {
+        var b = HttpRequest.newBuilder(URI.create(http.base() + path)).header("Authorization", "Bearer " + token)
+                .header("Accept", "text/event-stream");
+        if (lastEventId != null) {
+            b.header("Last-Event-ID", lastEventId);
+        }
+        HttpResponse<java.io.InputStream> res = HttpClient.newHttpClient().send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
         assertThat(res.statusCode()).isEqualTo(200);
         List<String> events = new CopyOnWriteArrayList<>();
+        var last = new java.util.concurrent.atomic.AtomicReference<String>();
         Thread t = Thread.ofVirtual().start(() -> {
             try (var in = new BufferedReader(new InputStreamReader(res.body()))) {
                 String name = null;
+                String id = null;
                 for (String line; (line = in.readLine()) != null; ) {
-                    if (line.startsWith("event:")) {
+                    if (line.startsWith("id:")) {
+                        id = line.substring(3).strip();
+                    } else if (line.startsWith("event:")) {
                         name = line.substring(6).strip();
                     } else if (line.startsWith("data:") && name != null) {
                         JsonNode d = com.wokflow.api.support.Http.JSON.readTree(line.substring(5));
-                        events.add(name + ":" + d.get("status").asText() + "@" + d.get("version").asInt());
+                        events.add(name.equals("resync") ? "resync" : name + ":" + d.get("status").asText() + "@" + d.get("version").asInt());
+                        if (id != null) {
+                            last.set(id);
+                        }
                         name = null;
+                        id = null;
                     }
                 }
             } catch (Exception ignored) {
                 // stream closed
             }
         });
-        return new Stream(events, t);
+        return new Stream(events, t, last, res.body());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.data.redis.core.StringRedisTemplate redis;
+
+    @Test
+    void aReconnectingClientGetsExactlyWhatItMissedFromTheStream() throws Exception {
+        var k = newKitchen(10);
+        String customer = newCustomer();
+        String merchant = signIn(k.merchantEmail());
+        UUID id = placeOrder(customer, k.id(), Map.of(k.plainDish(), 1));
+
+        Stream first = open("/api/orders/" + id + "/events", customer);
+        await(() -> first.events().contains("snapshot:PENDING_PAYMENT@1"));
+        pay(id);
+        await(() -> first.statuses().contains("PAID@2"));
+        String seen = first.lastId().get();
+        assertThat(seen).matches("\\d+-\\d+");
+        first.close();
+
+        // while disconnected
+        http.post("/api/merchant/orders/" + id + "/accept", merchant, null);
+        http.post("/api/merchant/orders/" + id + "/ready", merchant, null);
+        Thread.sleep(500); // let the outbox publish
+
+        Stream resumed = open("/api/orders/" + id + "/events", customer, seen);
+        await(() -> resumed.statuses().contains("READY@4"));
+        assertThat(resumed.events()).containsExactly("status:ACCEPTED@3", "status:READY@4"); // no snapshot, nothing twice
+        resumed.close();
+
+        // a position that has been trimmed away: the order stream falls back to a snapshot, a list stream to "resync"
+        redis.opsForStream().trim(LiveHub.STREAM, 0);
+        http.post("/api/rider/orders/" + id + "/claim", signIn("rider@example.com"), null);
+        Thread.sleep(500);
+        Stream stale = open("/api/orders/" + id + "/events", customer, "1-0");
+        await(() -> !stale.events().isEmpty());
+        assertThat(stale.events().getFirst()).isEqualTo("snapshot:READY@5");
+        Stream board = open("/api/merchant/restaurants/" + k.id() + "/events", merchant, "1-0");
+        await(() -> board.events().contains("resync"));
+        // a malformed id is treated as none
+        Stream garbage = open("/api/orders/" + id + "/events", customer, "5");
+        await(() -> !garbage.events().isEmpty());
+        assertThat(garbage.events().getFirst()).startsWith("snapshot:");
+        assertThat(LiveHub.compare("1700000000000-5", "1700000000000-12")).isNegative();
+        assertThat(LiveHub.compare("1700000000001-0", "1700000000000-99")).isPositive();
     }
 
     static void await(java.util.function.BooleanSupplier ok) throws InterruptedException {

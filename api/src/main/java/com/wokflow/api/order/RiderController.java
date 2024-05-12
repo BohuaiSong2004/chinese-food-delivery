@@ -33,13 +33,21 @@ public class RiderController {
         return orders.openJobs();
     }
 
+    /** Deliveries in progress (not paged: a rider has a handful at most). */
     @GetMapping("/orders")
     List<OrderView> mine() { return orders.riderOrders(CurrentUser.require()); }
 
+    @GetMapping("/orders/history")
+    com.wokflow.api.common.Cursor.Page<OrderView> history(@org.springframework.web.bind.annotation.RequestParam(required = false) String cursor,
+                                                          @org.springframework.web.bind.annotation.RequestParam(required = false) Integer limit) {
+        return orders.riderHistory(CurrentUser.require(), cursor, limit);
+    }
+
     @GetMapping(path = "/jobs/events", produces = "text/event-stream")
-    SseEmitter jobEvents(@AuthenticationPrincipal Jwt jwt) {
+    SseEmitter jobEvents(@AuthenticationPrincipal Jwt jwt,
+                         @org.springframework.web.bind.annotation.RequestHeader(name = "Last-Event-ID", required = false) String lastEventId) {
         CurrentUser.from(jwt).requireApproved();
-        return live.open("jobs", OrderController.lifetime(jwt), null);
+        return live.open("jobs", OrderController.lifetime(jwt), null, lastEventId);
     }
 
     @PostMapping("/orders/{id}/{action}")

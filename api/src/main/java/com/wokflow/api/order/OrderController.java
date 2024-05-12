@@ -64,7 +64,17 @@ public class OrderController {
     }
 
     @GetMapping("/api/orders")
-    List<OrderView> mine() { return orders.mine(CurrentUser.require()); }
+    com.wokflow.api.common.Cursor.Page<OrderView> mine(@org.springframework.web.bind.annotation.RequestParam(required = false) String cursor,
+                                                       @org.springframework.web.bind.annotation.RequestParam(required = false) Integer limit) {
+        return orders.mine(CurrentUser.require(), cursor, limit);
+    }
+
+    @GetMapping("/api/admin/orders")
+    com.wokflow.api.common.Cursor.Page<OrderView> all(@org.springframework.web.bind.annotation.RequestParam(required = false) String status,
+                                                      @org.springframework.web.bind.annotation.RequestParam(required = false) String cursor,
+                                                      @org.springframework.web.bind.annotation.RequestParam(required = false) Integer limit) {
+        return orders.all(CurrentUser.require(), status, cursor, limit);
+    }
 
     @GetMapping("/api/orders/{id}")
     OrderView get(@PathVariable UUID id) { return orders.get(id, CurrentUser.require()); }
@@ -87,19 +97,21 @@ public class OrderController {
 
     /** Snapshot first, then live status changes. Closes when the access token expires so the client reconnects with a fresh one. */
     @GetMapping(path = "/api/orders/{id}/events", produces = "text/event-stream")
-    SseEmitter events(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
-        OrderView snapshot = orders.get(id, CurrentUser.from(jwt));
-        return live.open("order:" + id, lifetime(jwt), snapshot);
+    SseEmitter events(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt,
+                      @RequestHeader(name = "Last-Event-ID", required = false) String lastEventId) {
+        CurrentUser user = CurrentUser.from(jwt);
+        orders.get(id, user); // access check up front; the snapshot itself is only read if the client cannot resume
+        return live.open("order:" + id, lifetime(jwt), () -> orders.get(id, user), lastEventId);
     }
 
     @GetMapping(path = "/api/me/events", produces = "text/event-stream")
-    SseEmitter myEvents(@AuthenticationPrincipal Jwt jwt) {
+    SseEmitter myEvents(@AuthenticationPrincipal Jwt jwt, @RequestHeader(name = "Last-Event-ID", required = false) String lastEventId) {
         CurrentUser u = CurrentUser.from(jwt);
         return live.open(switch (u.role()) {
             case CUSTOMER -> "customer:" + u.id();
             case RIDER -> "rider:" + u.id();
             default -> throw ApiException.badRequest("no_stream", "Use the restaurant stream");
-        }, lifetime(jwt), null);
+        }, lifetime(jwt), null, lastEventId);
     }
 
     static Duration lifetime(Jwt jwt) {

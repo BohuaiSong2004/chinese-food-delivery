@@ -7,8 +7,10 @@ export function useLiveRefresh(streamPath: string | null, reload: () => void) {
   useEffect(() => {
     if (!streamPath) return;
     const stop = openStream(streamPath, {
-      onOpen: reload, // catch up on anything missed while disconnected
+      // A resumed stream replays what was missed, so only a fresh connection needs a refetch.
+      onOpen: (resumed) => { if (!resumed) reload(); },
       onEvent: (name) => {
+        if (name === 'resync') { reload(); return; }
         if (name !== 'status') return;
         if (timer.current) clearTimeout(timer.current);
         timer.current = setTimeout(reload, 150);

@@ -6,6 +6,8 @@ import { api, ApiError } from '../../lib/api';
 import { money, shortId, time } from '../../lib/format';
 import type { OrderStatus, OrderView } from '../../lib/types';
 import { ErrorBox, Loading, Names, StatusBadge } from '../../components/bits';
+import { usePaged } from '../../lib/usePaged';
+import { dateTime } from '../../lib/format';
 
 const COLUMNS: OrderStatus[] = ['PAID', 'ACCEPTED', 'READY', 'PICKED_UP'];
 
@@ -80,6 +82,34 @@ export function Board({ rid }: { rid: number }) {
           </ul>
         </section>
       )}
+      <History rid={rid} />
     </>
+  );
+}
+
+/** Every order this kitchen has had, newest first, a page at a time. */
+function History({ rid }: { rid: number }) {
+  const { t, lang } = useI18n();
+  const [open, setOpen] = useState(false);
+  const history = usePaged<OrderView>(open ? `/api/merchant/restaurants/${rid}/orders/history?limit=20` : null);
+  return (
+    <section aria-labelledby="history">
+      <h2 id="history">
+        <button type="button" className="link-button" aria-expanded={open} onClick={() => setOpen(!open)}>{t('merchant.history')}</button>
+      </h2>
+      {open && (history.error ? <ErrorBox error={history.error} retry={history.reload} /> : !history.items ? <Loading /> : (
+        <>
+          <table>
+            <thead><tr><th scope="col">{t('merchant.when')}</th><th scope="col">{t('merchant.order')}</th><th scope="col">{t('merchant.customer')}</th><th scope="col">{t('merchant.amount')}</th><th scope="col">{t('admin.status')}</th></tr></thead>
+            <tbody>
+              {history.items.map((o) => (
+                <tr key={o.id}><td>{dateTime(o.createdAt, lang)}</td><td>#{shortId(o.id)}</td><td>{o.customerName}</td><td>{money(o.totalCents)}</td><td><StatusBadge status={o.status} /></td></tr>
+              ))}
+            </tbody>
+          </table>
+          {history.hasMore && <button type="button" className="secondary-button load-more" disabled={history.busy} onClick={() => void history.more()}>{t('common.more')}</button>}
+        </>
+      ))}
+    </section>
   );
 }
