@@ -215,6 +215,42 @@ class OrderFlowIT extends IntegrationTest {
         assertThat(http.post("/api/orders/" + id + "/cancel", customer, null).code()).isEqualTo("invalid_transition");
     }
 
+    /** An approved rider (copies the seeded rider's password hash). */
+    String newRider() {
+        String email = unique("rider") + "@example.com";
+        db.sql("insert into users (email, password_hash, display_name, role) select ?, password_hash, 'Test Rider', 'RIDER' from users where email = 'rider@example.com'")
+                .param(email).update();
+        return signIn(email);
+    }
+
+    @Test
+    void aRetriedChangeWhoseResponseWasLostSucceedsButSomeoneElsesStillConflicts() {
+        var k = newKitchen(5);
+        String merchant = signIn(k.merchantEmail());
+        UUID id = placeOrder(newCustomer(), k.id(), Map.of(k.plainDish(), 1));
+        pay(id); // version 2
+        var first = http.post("/api/merchant/orders/" + id + "/accept", merchant, null, Map.of("If-Match", "\"2\""));
+        assertThat(first.body().get("version").asInt()).isEqualTo(3);
+        // the same request again, as a client does after a timeout or a 503 from the proxy
+        var retry = http.post("/api/merchant/orders/" + id + "/accept", merchant, null, Map.of("If-Match", "\"2\""));
+        assertThat(retry.status()).isEqualTo(200);
+        assertThat(retry.body().get("status").asText()).isEqualTo("ACCEPTED");
+        assertThat(retry.body().get("version").asInt()).isEqualTo(3);
+        assertThat(db.sql("select count(*) from order_status_history where order_id = ?").param(id).query(Long.class).single())
+                .as("nothing applied twice").isEqualTo(3);
+
+        // a different action from the same stale version is still a conflict
+        assertThat(http.post("/api/merchant/orders/" + id + "/ready", merchant, null, Map.of("If-Match", "\"2\"")).code())
+                .isEqualTo("stale_version");
+        // and so is someone else's: two riders saw version 4; the second must not be told it won
+        http.post("/api/merchant/orders/" + id + "/ready", merchant, null, Map.of("If-Match", "\"3\""));
+        String riderA = newRider();
+        String riderB = newRider();
+        assertThat(http.post("/api/rider/orders/" + id + "/claim", riderA, null, Map.of("If-Match", "\"4\"")).status()).isEqualTo(200);
+        assertThat(http.post("/api/rider/orders/" + id + "/claim", riderA, null, Map.of("If-Match", "\"4\"")).status()).isEqualTo(200);
+        assertThat(http.post("/api/rider/orders/" + id + "/claim", riderB, null, Map.of("If-Match", "\"4\"")).code()).isEqualTo("stale_version");
+    }
+
     @Test
     void customersCancelBeforeTheKitchenAcceptsAndGetRefunded() {
         var k = newKitchen(5);

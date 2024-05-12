@@ -19,11 +19,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class Tx {
     private static final int MAX_ATTEMPTS = 4;
     private final TransactionTemplate template;
+    private final TransactionTemplate readOnly;
     private final Counter deadlocks;
     private final Counter serialization;
 
     public Tx(TransactionTemplate template, MeterRegistry meters) {
         this.template = template;
+        this.readOnly = new TransactionTemplate(java.util.Objects.requireNonNull(template.getTransactionManager()));
+        this.readOnly.setReadOnly(true);
         this.deadlocks = meters.counter("wokflow.tx.retries", "reason", "deadlock");
         this.serialization = meters.counter("wokflow.tx.retries", "reason", "serialization");
     }
@@ -47,6 +50,15 @@ public class Tx {
                 }
             }
         }
+    }
+
+    /**
+     * A read made of several queries, on one pooled connection and one snapshot. Outside a
+     * transaction every statement borrows and returns its own connection, so under pool pressure
+     * a seven-query order page queued for a connection seven times.
+     */
+    public <T> T read(Supplier<T> work) {
+        return readOnly.execute(status -> work.get());
     }
 
     public void runVoid(Runnable work) {

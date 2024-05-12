@@ -274,15 +274,24 @@ public class OrderService {
     }
 
     public OrderView get(UUID id, CurrentUser user) {
-        Order o = orders.find(id).orElseThrow(() -> ApiException.notFound("Order"));
-        authorizeView(o, user);
-        return view(o);
+        return tx.read(() -> {
+            Order o = orders.find(id).orElseThrow(() -> ApiException.notFound("Order"));
+            authorizeView(o, user);
+            return view(o);
+        });
     }
 
+    /**
+     * The response is built inside the same transaction: loading it afterwards needed a second pooled
+     * connection, and when the pool was exhausted a change that had committed came back as 503, so
+     * the client retried it and got a conflict.
+     */
     public OrderView act(UUID id, OrderAction action, CurrentUser user, Integer expectedVersion, String reason) {
-        tx.run(() -> transitions.apply(new OrderTransitions.Request(id, action, user.id(), expectedVersion,
-                o -> authorizeAction(o, action, user), reason)));
-        return view(orders.find(id).orElseThrow());
+        return tx.run(() -> {
+            transitions.apply(new OrderTransitions.Request(id, action, user.id(), expectedVersion,
+                    o -> authorizeAction(o, action, user), reason));
+            return view(orders.find(id).orElseThrow());
+        });
     }
 
     /** CLAIM inside the caller's transaction (accepting a dispatch offer). */
@@ -323,6 +332,10 @@ public class OrderService {
     }
 
     private com.wokflow.api.common.Cursor.Page<OrderView> page(String column, Long owner, String status, String cursor, Integer limit) {
+        return tx.read(() -> pageInTx(column, owner, status, cursor, limit));
+    }
+
+    private com.wokflow.api.common.Cursor.Page<OrderView> pageInTx(String column, Long owner, String status, String cursor, Integer limit) {
         if (status != null && java.util.Arrays.stream(OrderStatus.values()).noneMatch(s -> s.name().equals(status))) {
             throw ApiException.badRequest("bad_status", "Unknown status " + status);
         }
@@ -334,15 +347,15 @@ public class OrderService {
 
     public List<OrderView> forRestaurant(long restaurantId, CurrentUser user) {
         user.requireStaffOf(restaurantId);
-        return orders.forRestaurant(restaurantId).stream().map(this::view).toList();
+        return tx.read(() -> orders.forRestaurant(restaurantId).stream().map(this::view).toList());
     }
 
     public List<OrderView> openJobs() {
-        return orders.openJobs(50).stream().map(this::view).toList();
+        return tx.read(() -> orders.openJobs(50).stream().map(this::view).toList());
     }
 
     public List<OrderView> riderOrders(CurrentUser user) {
-        return orders.activeForRider(user.id()).stream().map(this::view).toList();
+        return tx.read(() -> orders.activeForRider(user.id()).stream().map(this::view).toList());
     }
 
     void authorizeView(Order o, CurrentUser u) {

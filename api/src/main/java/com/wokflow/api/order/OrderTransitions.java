@@ -51,6 +51,9 @@ public class OrderTransitions {
                 r.authorize().accept(o);
             }
             if (r.expectedVersion() != null && r.expectedVersion() != o.version()) {
+                if (alreadyDoneByCaller(r, o)) {
+                    return new Changed(o.version(), o.status(), o.customerId(), o.restaurantId(), o.riderId(), o.updatedAt());
+                }
                 throw stale(o);
             }
             if (!r.action().from.contains(o.status())) {
@@ -121,6 +124,23 @@ public class OrderTransitions {
                 select ?, ?, p.id, ?, ?, 'REQUESTED' from payments p where p.order_id = ?
                 on conflict (order_id) do nothing""")
                 .params(UUID.randomUUID(), orderId, amountCents, reason, orderId).update();
+    }
+
+    /**
+     * A retry of a change that already happened. The client sent the version it saw; if the very
+     * next version is this same action by this same actor, the first attempt committed and only its
+     * response was lost (a timeout, or a 503 from a proxy), so the retry succeeds with the current
+     * state instead of a confusing "stale version" conflict.
+     */
+    private boolean alreadyDoneByCaller(Request r, Order current) {
+        if (r.actorId() == null || current.version() <= r.expectedVersion()) {
+            return false;
+        }
+        return orders.historyAt(r.orderId(), r.expectedVersion() + 1)
+                .filter(h -> r.actorId().equals(h.actorId()))
+                .filter(h -> r.action().to == null || h.status() == r.action().to)
+                .filter(h -> java.util.Objects.equals(h.note(), note(r)))
+                .isPresent();
     }
 
     private static String note(Request r) {
