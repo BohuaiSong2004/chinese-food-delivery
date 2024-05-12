@@ -13,6 +13,8 @@ stock, and see their earnings in a double-entry ledger; riders claim and deliver
 | Customer: live order tracking | Kitchen: live order board |
 |---|---|
 | ![Order page updating live](docs/screenshots/order-live.png) | ![Kitchen board](docs/screenshots/kitchen-board.png) |
+| **Menu with dish photos** | **Kitchen: menu editor** |
+| ![Restaurant menu](docs/screenshots/menu.png) | ![Menu editor](docs/screenshots/kitchen-menu-editor.png) |
 | **Search: `mpdf` → 麻婆豆腐 (pinyin initials)** | **中文界面 (mobile)** |
 | ![Search](docs/screenshots/search-pinyin-initials.png) | <img src="docs/screenshots/mobile-zh-menu.png" alt="Chinese menu on mobile" width="300"> |
 
@@ -56,7 +58,7 @@ How the hard parts work:
   e-mail with single-use 30-minute links that end every session.
 - **Images**: uploads are sniffed by magic bytes, size-checked before decoding, re-encoded without metadata
   into three sizes, stored content-addressed (local disk or S3) and served with immutable caching.
-- **Operating it**: Prometheus + Grafana profile with a dashboard and alert rules; fault-injection tests that
+- **Operating it**: Prometheus + Grafana profile with a [dashboard](docs/screenshots/grafana-dashboard.png) and alert rules; fault-injection tests that
   freeze Postgres, Redis and Elasticsearch; runbooks for key rotation and failures in
   [docs/operations.md](docs/operations.md).
 - **Web app** (React 19, TypeScript): English/中文 with a completeness test, WCAG 2.1 AA audited with axe in
