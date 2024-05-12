@@ -249,6 +249,40 @@ kitchen's (0.5 s apart), 5 streams see p50 25–45 ms.
 - Search tests looked for "fried rice" and "xlb", which every test kitchen sells; in a full run the
   expected dish could fall off the first page.
 
+### 21. Search features that halved search throughput
+
+Synonyms, a relaxed second pass, highlighting and "N dishes without the filters" all passed their tests.
+Re-running the 20-client search benchmark against the previous build, alternated on the same machine
+(this VM varies ±50%, so only back-to-back runs count), showed **45–55 req/s against 136–146**, p95 4×
+worse. Single requests were still 7–46 ms, so the cost only showed under concurrency.
+
+`docker stats` during the run put Elasticsearch at 88% CPU and each API replica at ~45%: the queries had
+become heavier. Switching highlighting off in an experiment brought ~108 req/s back. The highlighter had
+`require_field_match: false`, so it re-applied every fuzzy, prefix and n-gram clause of the query (most of
+them aimed at hidden pinyin fields) to every highlighted field of every hit. A small highlight query of its
+own helped (~66 req/s) but not enough. The fix was to stop asking Elasticsearch: `Highlighter` marks the
+words in Java on the 20 hits being returned (word starts, Elasticsearch's AUTO edit distance, adjacent
+Chinese character pairs), which is microseconds, and the Postgres fallback gets the same marks.
+
+Two more pieces of the gap: filtered searches that found nothing made a second request to count the
+matches without the filters, now a `post_filter` plus an aggregation in the same request; and each synonym
+variant repeated the full fuzzy, multi-field, pinyin clause set, now exact words only (the variant comes
+from our list, not from someone's typing). End result 120–123 req/s against 136–146: the remaining
+~12–15% is real extra work. Suggestions went from p95 274 ms to 49 ms with the same change. The lesson is
+the same as story 18: every feature that touches a hot path gets a back-to-back benchmark against the
+previous build, not just a functional test.
+
+### 22. 47 out of 47 (and why that number is not in the README)
+
+The synonym list was written by running 47 labeled queries, looking at what failed and adding the missing
+names. Afterwards the same 47 scored 47/47 — but that measures how well the list was fitted to those
+queries, not how well it generalizes. So a second set of 45 queries was written before running them, and
+`synonyms.txt` was frozen: held-out top-1 went 35 → 37 with synonyms alone. Most remaining misses returned
+nothing at all because every word had to match ("spicy fish": no dish name says "spicy"), which led to the
+relaxed second pass — 37 → 41, later 40 after the synonym clauses were made cheaper (story 21). The README
+quotes the held-out numbers and says the relaxed pass was designed after seeing those misses; the 47/47 is
+only in `docs/performance.md`, labeled as the tuning set.
+
 ## Things deliberately left out
 
 - Access tokens are not revocable before they expire (15 minutes); that is the cost of stateless
@@ -258,4 +292,9 @@ kitchen's (0.5 s apart), 5 streams see p50 25–45 ms.
 - The live stream keeps about 20,000 events. A client away longer than that gets a snapshot (or "resync"
   for list views) instead of a replay; status is always confirmed from Postgres before anything acts on it.
 - No distributed tracing: one service plus its stores, and the per-route histograms show the slow paths.
+- Recommendations are co-occurrence counts, not a trained model: with no real users there is nothing to
+  train on or evaluate against, so the cosine ranking is not claimed to be better than anything — only to
+  stop the most popular dish from being suggested with everything.
+- The synonym list is hand-written (104 phrases). The admin page lists searches that matched nothing, which
+  is where new entries should come from; nothing adds them automatically.
 - A real payment provider would also need 3-D Secure / SCA handling, partial refunds and disputes.

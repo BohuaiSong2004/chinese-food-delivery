@@ -20,13 +20,15 @@ stock, and see their earnings in a double-entry ledger; riders claim and deliver
 
 ## What it does
 
-**For customers** — search in English, Chinese characters or pinyin; see only kitchens that deliver to the
-pin you chose, with the delivery fee and time for that distance; order and pay; watch the order and the
-rider's position move live; review it afterwards. **For kitchens** — apply as a partner, get approved, edit
+**For customers** — search in English, Chinese characters or pinyin, with suggestions while typing and
+other names for a dish understood (boba, 馄饨/云吞/抄手); see only kitchens that deliver to the pin you
+chose, with the delivery fee and time for that distance; order again from past orders, with dishes often
+ordered together suggested in the cart; pay; watch the order and the rider's position move live; review it
+afterwards. **For kitchens** — apply as a partner, get approved, edit
 the menu (categories, dishes, photos, daily stock), run a live order board, answer reviews, and see
 earnings in a double-entry ledger. **For riders** — go online, receive the nearest offer with a 30-second
 timer (or take jobs from the board), and deliver. **For admins** — approve kitchens and riders, suspend
-them, and read the audit log.
+them, read the audit log, and see which searches found nothing.
 
 How the hard parts work:
 
@@ -49,8 +51,17 @@ How the hard parts work:
   expire after 30 s and move on. Delivery areas are geo-shapes in Elasticsearch (with a haversine fallback in
   Postgres); fee = base + distance beyond 2 km.
 - **Search**: English with typos, CJK bigrams, pinyin three ways (`mapo doufu`, `mapodoufu`, initials
-  `mpdf`), facets, popularity and a Bayesian rating boost; rebuilt by alias swap when out of step. If
-  Elasticsearch is down or slow, search answers from Postgres instead of failing.
+  `mpdf`), facets, popularity and a Bayesian rating boost; rebuilt by alias swap when out of step. One
+  synonym list (`api/src/main/resources/search/synonyms.txt`) rewrites queries for both Elasticsearch and
+  the fallback. When no dish has every word, a second pass accepts some of them and says so; when filters
+  leave nothing, the count without them comes from the same request (`post_filter` + an aggregation).
+  Matched words are marked in the API on the page of hits. Suggestions while typing cover dishes and
+  restaurants (`cdys` → 成都夜市). Searches that match nothing anywhere are counted (in memory, flushed every
+  30 s, kept 30 days) for the admin page. If Elasticsearch is down or slow, search answers from Postgres
+  instead of failing.
+- **Recommendations**: "order again" from the customer's paid orders (only dishes still on a menu that
+  delivers to them), and "often ordered together" in the cart from pairs precomputed hourly by cosine
+  similarity, so a popular dish is not suggested with everything.
 - **Redis hot menu**: hourly sorted sets of paid dish counts summed with `ZUNIONSTORE`, exactly-once
   counting in a Lua script, self-rebuilding from the ledger.
 - **Auth**: ES256 access tokens verified by signature (JWKS at `/.well-known/jwks.json`, rotation with
@@ -74,7 +85,9 @@ How the hard parts work:
 | Live status over SSE (commit → browser) | 5 streams, steps 0.5 s apart: p50 25–45 ms; 200 orders driven at once: p50 0.8–1.3 s; every event in order, 0 lost |
 | A dependency frozen mid-test | Elasticsearch: search answers from Postgres after 1.5 s, then ~15 ms; Redis: first page 2.1 s, then normal; Postgres: 503 in 6–10 s and back without a restart |
 | Hot menu, 293,583 paid orders in the window | Redis 0.35 ms (0.06 ms cached) vs SQL aggregation 246 ms; identical top 6 |
-| Search, 100,000 dishes, 20 clients | Elasticsearch p50 113–168 ms vs Postgres fallback 2.8 s; top-1 accuracy on 16 typo/pinyin/Chinese queries 15/16 vs 10/16 |
+| Search, 100,000 dishes, 20 clients | Elasticsearch p50 195–216 ms vs Postgres fallback 3.0 s |
+| Search relevance, 45 held-out queries (not used to write the synonyms) | top-1 35/45 → **40/45**, MRR 0.78 → 0.93, queries with no result 10 → 1; Postgres fallback 25 → 30/45 |
+| Suggestions while typing, 10 people typing nonstop | p50 15 ms, p95 49 ms |
 | Authenticated requests with the verified-token cache | 556 → 1,088 req/s on the same box |
 | Lighthouse (mobile, median of 3) | 95–99 performance and 100 accessibility / best practices / SEO on home, search, sign-in, cart; 85–86 on restaurant pages (the cover photo is the LCP element) |
 
@@ -160,27 +173,29 @@ API docs: http://localhost:8080/api/docs (OpenAPI at `/api/openapi.json`).
 ## Tests
 
 ```bash
-mvn verify                       # 134 backend tests on real Postgres, Redis, Elasticsearch, Mailpit, S3 mock (Testcontainers); JaCoCo
-cd web && npm run lint && npm run typecheck && npm test      # 23 unit tests
+mvn verify                       # 158 backend tests on real Postgres, Redis, Elasticsearch, Mailpit, S3 mock (Testcontainers); JaCoCo
+cd web && npm run lint && npm run typecheck && npm test      # 32 unit tests
 cd web && E2E_BASE_URL=http://localhost:8000 npx playwright test     # against the compose stack
 ```
 
-- Backend (API line coverage 93.3%, branch 78.2%): auth (tampering, `alg: none`, expiry, refresh reuse, key
+- Backend (API line coverage 93.2%, branch 79.4%): auth (tampering, `alg: none`, expiry, refresh reuse, key
   rotation, password reset without account enumeration), the order lifecycle and every refusal, safe
   retries, webhooks (signature, replay window, duplicates, Stripe events), refunds with a provider outage,
   concurrency (200 customers racing for 50 baskets, accept vs cancel, rider claims, webhook storms,
   concurrent payouts), ledger constraints, a deadlock negative control, onboarding and menu editing, image
   uploads (bombs, EXIF, S3), delivery areas and fees, reviews, keyset paging, dispatch offers and expiry,
-  SSE resume after a reconnect, search relevance and self-healing, and **fault injection**: Postgres, Redis
+  SSE resume after a reconnect, search relevance, synonyms, the relaxed pass, sorting, suggestions, the
+  miss log and self-healing, recommendations, and **fault injection**: Postgres, Redis
   and Elasticsearch frozen mid-test, with recovery checked afterwards.
 - Frontend unit tests: token refresh shared between concurrent requests, which requests may be retried on
-  503, SSE parsing and `Last-Event-ID` resume, keyset paging, the demo rider's movement, dictionary
+  503, SSE parsing and `Last-Event-ID` resume, keyset paging, highlighted matches (rendered as text, never
+  HTML), recent searches with broken storage, the demo rider's movement, dictionary
   completeness.
 - End to end (Playwright, Chromium + mobile, Firefox, WebKit, all in CI against the Docker stack): a
   customer, a kitchen and a rider in separate browsers moving one order to the door; dispatch offers;
   partner and rider onboarding; saved addresses and delivery areas; reviews; password reset through the
-  Mailpit inbox; declined payment; a stale kitchen screen; search in three scripts; the Chinese UI; axe
-  WCAG 2.1 AA audits.
+  Mailpit inbox; declined payment; a stale kitchen screen; search in three scripts; suggestions by keyboard;
+  recent searches; the Chinese UI; axe WCAG 2.1 AA audits (also with the suggestion list open).
 - CI also restarts every container and checks that data comes back, builds the images for amd64 and arm64,
   and runs `terraform validate`, tflint and Checkov.
 
@@ -193,6 +208,8 @@ docker run --rm --network host -v "$PWD/loadtest:/lt" grafana/k6:2.4.0 run -e VU
 docker run --rm --network host -v "$PWD/loadtest:/lt" grafana/k6:2.4.0 run -e VUS=1000 -e RATE=15 /lt/peak.js
 ./loadtest/verify.sh             # deadlocks, oversell, ledger, history/status agreement, payment latency
 node loadtest/live-watch.mjs 200 # SSE latency and ordering (PAUSE_MS=500 spaces the steps like real users)
+python3 loadtest/search-eval.py loadtest/search-queries-holdout.tsv --misses   # search relevance
+docker run --rm --network host -v "$PWD/loadtest:/lt" grafana/k6:2.4.0 run /lt/suggest.js     # typing load
 ```
 
 ## License
