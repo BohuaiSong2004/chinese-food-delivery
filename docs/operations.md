@@ -68,6 +68,19 @@ match Stripe's OpenAPI spec; `StripeEventsTest` covers the event mapping; `Strip
 sends signed Stripe events through the real endpoint. stripe-mock returns canned responses,
 so the full flow against a real Stripe test account has not been run in this repo.
 
+## Search vocabulary and recommendations
+
+- **Searches that found nothing** are listed on the admin page (Operations tab), most frequent first, for
+  the last 30 days. Each API replica counts them in memory and writes them every 30 s; the table keeps 30
+  days and at most 5,000 queries. A Postgres outage loses at most that window's counts.
+- **Adding a name** for a dish: add a line to `api/src/main/resources/search/synonyms.txt` (`a, b, c` for
+  names that mean the same; `a => b` when `a` should also find `b` but not the reverse) and deploy. No
+  reindex is needed: synonyms rewrite the query, not the index. Check with
+  `python3 loadtest/search-eval.py loadtest/search-queries-holdout.tsv --misses` that nothing got worse.
+  Alternatively put the name in the dish's description, which is searched too.
+- **"Often ordered together"** is rebuilt hourly (`wokflow.pairings.rebuild` timer in /actuator/prometheus;
+  2.5–8 s at 300k orders). A failed rebuild keeps the previous pairs and logs a warning.
+
 ## Monitoring
 
 ```sh

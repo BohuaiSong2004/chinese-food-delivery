@@ -104,7 +104,7 @@ dishes over the window.
 Both returned the identical top 6. The index does not help because the cost is aggregating ~587k rows, not
 finding them.
 
-## 4. Search: Elasticsearch vs the Postgres fallback (`search.js`, `search-accuracy.sh`)
+## 4. Search: Elasticsearch vs the Postgres fallback (`search.js`, `search-eval.py`)
 
 20 clients for 30 s cycling through 16 real queries; each request returns 20 hits plus tag and cuisine
 facets from Elasticsearch.
@@ -113,18 +113,68 @@ facets from Elasticsearch.
 |---|---|---|---|---|
 | 64 demo dishes (2026-11-24) | 185 ms / 439 ms | 93 | **20 ms** / 69 ms | 748 |
 | 100,064 dishes (2026-11-23, `bench-catalog.sql`) | **113–168 ms** / 203–370 ms | 105–166 | 2.76–2.87 s / 3.5–6.0 s | 7–8 |
+| 100,065 dishes, after synonyms / relaxed pass / highlighting (2026-11-24) | **195–216 ms** / 379–404 ms | 86–94 | 3.0 s / 5.4 s | 7 |
 
 On the tiny demo catalog Postgres is faster — it scans 64 rows while every Elasticsearch query runs a dozen
 fuzzy, n-gram and pinyin clauses, a geo filter, two aggregations and a rating function on a shared CPU. At
-catalog scale the fallback's `ILIKE '%…%'` / trigram plan falls over and Elasticsearch is ~20× faster.
+catalog scale the fallback's `ILIKE '%…%'` / trigram plan falls over and Elasticsearch is ~15–20× faster.
+The two 100k rows are different days; on the same day, the build before the search-experience work did
+152–189 ms p50 and 92–120 req/s, so at that size the new work costs little (see below).
 
-Relevance matters more than speed here. Top-1 accuracy on 16 queries with one right answer (English,
-typos, characters, spaced/joined pinyin, initials), re-checked 2026-11-24:
+### Relevance (`search-eval.py`)
 
-| | Elasticsearch | Postgres fallback |
-|---|---|---|
-| Correct | **15 / 16** | 10 / 16 |
-| Misses | `xlb` (another soup dumpling ranks first) | `mpdf`, `xlb`, `dandanmian`, `ddm`, `yupianzhou`, `roujiamo` — no pinyin at all |
+Relevance matters more than speed here. Two labeled query sets, each query with the dish names that count
+as a right answer; the script reports top-1 accuracy, MRR@10 and queries that returned nothing:
+
+- `search-queries.tsv` (47): English, typos, characters, pinyin spaced/joined/initials, mixed scripts, and
+  other names for dishes. **This set was used to write `synonyms.txt`**, so its "after" number is inflated.
+- `search-queries-holdout.tsv` (45): written after the synonym list, which was not edited after running it.
+  This is the honest number. (The relaxed second pass below was designed after seeing its misses, so the
+  last column is somewhat tuned too.)
+
+Demo catalog, 2026-11-24:
+
+| Set | Before | + synonyms | + relaxed pass, final |
+|---|---|---|---|
+| Tuning, Elasticsearch | 36/47, MRR 0.78, 10 empty | 47/47 | 47/47, MRR 1.00, 0 empty |
+| **Held-out, Elasticsearch** | **35/45, MRR 0.78, 10 empty** | 37/45, MRR 0.82, 8 empty | **40/45, MRR 0.93, 1 empty** |
+| Tuning, Postgres fallback | 22/47, MRR 0.48 | 37/47 | 37/47, MRR 0.81 |
+| Held-out, Postgres fallback | 25/45, MRR 0.56 | 26/45 | 30/45, MRR 0.67 |
+
+Still wrong on the held-out set: `jook` (Cantonese for congee — not in the list), `spicy fish` and
+`spicy wontons` (no dish name says "spicy"; the right dish is 2nd–3rd), `salt and pepper chicken` (2nd),
+`char siu bao` (3rd, behind Char Siu Rice). The fallback has no pinyin at all, so the pinyin rows stay low.
+
+### What the extra work costs (`search.js`, old and new build back to back)
+
+The same 20-client test, the build before this work and after it, alternated on the same machine:
+
+| Build | req/s | p50 | p95 |
+|---|---|---|---|
+| Before (no synonyms, no relaxed pass, no highlighting) | 136–146 | 116–128 ms | 292–324 ms |
+| First version (Elasticsearch highlighter, a second request for the count) | 45–55 | 115–347 ms | 1.3–1.5 s |
+| Final | 120–123 | 131–141 ms | 383–402 ms |
+
+Elasticsearch was the busy container (88% CPU). Three changes recovered most of the loss: marking the
+matched words in Java on the page of hits instead of with Elasticsearch's highlighter (66 → ~110 req/s);
+counting "without the filters" with a `post_filter` and an aggregation in the same request instead of a
+second count; and searching synonym variants as exact words, without the fuzzy and pinyin clauses the typed
+words get. What is left (~12–15%) is the synonym clauses and the extra pass for searches that match nothing.
+
+### Suggestions while typing (`suggest.js`)
+
+10 people typing ten words letter by letter with no pauses (one request per keystroke, every 120 ms, no
+client cache — worse than the browser, which waits 120 ms after the last key and caches prefixes):
+**p50 15 ms, p95 49 ms, p99 83 ms** at 69 req/s, 0 errors. With the first version's Elasticsearch
+highlighting it was p50 57 ms, p95 274 ms.
+
+### Often ordered together (`bench-hotmenu.sql`: 300,000 two-line orders at one restaurant)
+
+| | Time |
+|---|---|
+| Rebuild all pairs (hourly job, one replica at a time) | 2.5–7.8 s → 9,900 pairs |
+| Look up the pairs for a cart (what the cart page calls) | ~1 ms |
+| The same answer computed per request for the most popular dish | 180–280 ms |
 
 ## 5. Authenticated requests: verified-token cache
 
