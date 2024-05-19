@@ -17,7 +17,10 @@ public class Outbox {
     private final JdbcClient db;
     private final ObjectMapper json;
 
-    public Outbox(JdbcClient db, ObjectMapper json) {
+    private final OutboxWakeup wakeup;
+
+    public Outbox(JdbcClient db, ObjectMapper json, OutboxWakeup wakeup) {
+        this.wakeup = wakeup;
         this.db = db;
         this.json = json;
     }
@@ -28,5 +31,6 @@ public class Outbox {
         }
         db.sql("insert into outbox (topic, aggregate_id, payload) values (?, ?, ?::jsonb)")
                 .params(topic, aggregateId, json.writeValueAsString(payload)).update();
+        wakeup.afterCommit();
     }
 }
