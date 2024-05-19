@@ -49,6 +49,8 @@ public class JwtKeys {
             KeyPairGenerator gen = KeyPairGenerator.getInstance("EC");
             gen.initialize(new ECGenParameterSpec("secp256r1"));
             pair = gen.generateKeyPair();
+        } else if (!Files.exists(Path.of(file)) && props.jwt().generateIfMissing()) {
+            pair = createShared(Path.of(file));
         } else {
             pair = read(Path.of(file));
         }
@@ -56,6 +58,36 @@ public class JwtKeys {
         this.privateKey = (ECPrivateKey) pair.getPrivate();
         byte[] digest = MessageDigest.getInstance("SHA-256").digest(publicKey.getEncoded());
         this.keyId = Base64.getUrlEncoder().withoutPadding().encodeToString(digest).substring(0, 16);
+    }
+
+    /**
+     * First start of a local stack: generate the key and publish it with
+     * link(2), which fails if the file exists. Two replicas racing both
+     * generate, exactly one link wins, and both then read the winner's file.
+     * An EC key has no expiry, so nothing here goes stale.
+     */
+    static KeyPair createShared(Path path) throws IOException, GeneralSecurityException {
+        KeyPairGenerator gen = KeyPairGenerator.getInstance("EC");
+        gen.initialize(new ECGenParameterSpec("secp256r1"));
+        KeyPair mine = gen.generateKeyPair();
+        Path tmp = Files.createTempFile(path.toAbsolutePath().getParent(), ".jwt", ".tmp");
+        try {
+            Files.writeString(tmp, pem("PRIVATE KEY", mine.getPrivate().getEncoded()) + pem("PUBLIC KEY", mine.getPublic().getEncoded()));
+            try {
+                Files.createLink(path, tmp);
+                log.info("Generated JWT signing key at {}", path);
+            } catch (java.nio.file.FileAlreadyExistsException raced) {
+                log.info("Another replica created {} first; using it", path);
+            }
+        } finally {
+            Files.deleteIfExists(tmp);
+        }
+        return read(path);
+    }
+
+    static String pem(String type, byte[] der) {
+        return "-----BEGIN " + type + "-----\n" + Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.US_ASCII)).encodeToString(der)
+                + "\n-----END " + type + "-----\n";
     }
 
     static KeyPair read(Path path) throws IOException, GeneralSecurityException {

@@ -57,6 +57,7 @@ wokflow:
   jwt:
     issuer: ${JWT_ISSUER:wokflow}
     private-key-file: ${JWT_PRIVATE_KEY_FILE:}
+    generate-if-missing: ${JWT_GENERATE_IF_MISSING:false}   # local stacks only; production mounts a secret
     access-ttl: ${JWT_ACCESS_TTL:15m}
     refresh-ttl: ${JWT_REFRESH_TTL:30d}
     refresh-cookie-secure: ${REFRESH_COOKIE_SECURE:false}
