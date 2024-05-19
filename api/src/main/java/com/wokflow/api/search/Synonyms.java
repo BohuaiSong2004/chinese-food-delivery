@@ -40,11 +40,24 @@ public final class Synonyms {
         }
         String q = normalize(query);
         Set<String> out = new LinkedHashSet<>();
+        // Stretches of the query already replaced by a longer phrase: 小笼 must not fire again inside 小笼包
+        // (that produced 汤包包). Rules are longest first, so the longest phrase claims its stretch.
+        List<int[]> claimed = new ArrayList<>();
         for (Rule rule : RULES) {
             Matcher m = matcher(rule.from(), q);
-            if (!m.find()) {
+            boolean found = false;
+            while (m.find()) {
+                int start = m.start();
+                int end = m.end();
+                if (claimed.stream().noneMatch(c -> start < c[1] && c[0] < end)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
                 continue;
             }
+            claimed.add(new int[] {m.start(), m.end()});
             for (String to : rule.to()) {
                 String variant = (q.substring(0, m.start()) + to + q.substring(m.end())).strip();
                 if (!variant.equals(q)) {
