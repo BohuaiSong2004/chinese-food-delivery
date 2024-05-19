@@ -40,6 +40,25 @@ class SynonymsTest {
     }
 
     @Test
+    void aShorterPhraseInsideALongerOneDoesNotFireAgain() {
+        // 小笼 is inside 小笼包: replacing it as well produced 汤包包 and 小笼包包
+        assertThat(Synonyms.variants("小笼包")).containsExactlyInAnyOrder("汤包", "小笼");
+        assertThat(Synonyms.variants("鲜肉小笼包")).containsExactlyInAnyOrder("鲜肉汤包", "鲜肉小笼");
+        // two separate phrases in one query still both get variants
+        assertThat(Synonyms.variants("tofu wonton")).contains("bean curd wonton", "tofu won ton");
+    }
+
+    @Test
+    void personalLookingSearchesAreNotKeptAsMisses() {
+        assertThat(SearchMisses.looksPersonal("jane.doe@example.com")).isTrue();
+        assertThat(SearchMisses.looksPersonal("(626) 555-0199")).isTrue();
+        assertThat(SearchMisses.looksPersonal("4111 1111 1111 1111")).isTrue();
+        assertThat(SearchMisses.looksPersonal("no. 7 noodles")).isFalse();
+        assertThat(SearchMisses.looksPersonal("2 egg tarts")).isFalse();
+        assertThat(SearchMisses.looksPersonal("jook")).isFalse();
+    }
+
+    @Test
     void parsesCommentsBlankLinesAndArrows() {
         var rules = Synonyms.parse(List.of("# comment", "", "a, b => c", "x, y"));
         assertThat(rules).extracting(Synonyms.Rule::from).containsExactlyInAnyOrder("a", "b", "x", "y");

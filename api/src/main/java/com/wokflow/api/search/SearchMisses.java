@@ -37,7 +37,7 @@ public class SearchMisses {
             return;
         }
         String q = Synonyms.normalize(query);
-        if (q.isEmpty() || q.length() > 100) {
+        if (q.isEmpty() || q.length() > 100 || looksPersonal(q)) {
             return;
         }
         LongAdder n = buffer.get(q);
@@ -48,6 +48,16 @@ public class SearchMisses {
             n = buffer.computeIfAbsent(q, k -> new LongAdder());
         }
         n.increment();
+    }
+
+    private static final java.util.regex.Pattern PERSONAL = java.util.regex.Pattern.compile("@|\\d[\\d\\s().-]{5,}\\d");
+
+    /**
+     * People paste odd things into a search box. An email address or a phone/card-like run of digits is never
+     * a dish name, and admins should not see it, so it is not kept.
+     */
+    static boolean looksPersonal(String q) {
+        return PERSONAL.matcher(q).find();
     }
 
     @Scheduled(fixedDelayString = "PT30S", initialDelayString = "PT30S")
