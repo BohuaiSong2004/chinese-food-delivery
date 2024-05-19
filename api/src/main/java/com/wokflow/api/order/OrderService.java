@@ -285,6 +285,12 @@ public class OrderService {
         return view(orders.find(id).orElseThrow());
     }
 
+    /** CLAIM inside the caller's transaction (accepting a dispatch offer). */
+    public void claimInTransaction(UUID id, CurrentUser rider) {
+        transitions.apply(new OrderTransitions.Request(id, OrderAction.CLAIM, rider.id(), null,
+                o -> authorizeAction(o, OrderAction.CLAIM, rider), null));
+    }
+
     public java.util.Optional<String> checkout(UUID id, CurrentUser user) {
         Order o = orders.find(id).orElseThrow(() -> ApiException.notFound("Order"));
         if (o.customerId() != user.id()) {

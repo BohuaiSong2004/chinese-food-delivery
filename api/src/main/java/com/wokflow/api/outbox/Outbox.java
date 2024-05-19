@@ -12,6 +12,7 @@ public class Outbox {
     public static final String ORDER_PAID = "order.paid";
     public static final String DISH_CHANGED = "dish.changed";
     public static final String RESTAURANT_CHANGED = "restaurant.changed";
+    public static final String DISPATCH_OFFER = "dispatch.offer";
 
     private final JdbcClient db;
     private final ObjectMapper json;

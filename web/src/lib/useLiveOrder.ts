@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, openStream } from './api';
-import type { OrderView, StatusEvent } from './types';
+import type { OrderView, RiderTracking, StatusEvent } from './types';
 
 /**
  * The order, kept current from the SSE stream. Every event and every fetch is
@@ -11,6 +11,7 @@ export function useLiveOrder(id: string) {
   const [order, setOrder] = useState<OrderView | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [live, setLive] = useState(false);
+  const [rider, setRider] = useState<RiderTracking | null>(null);
   const version = useRef(0);
 
   useEffect(() => {
@@ -28,6 +29,7 @@ export function useLiveOrder(id: string) {
       onEvent: (name, data) => {
         if (name === 'snapshot') apply(JSON.parse(data) as OrderView);
         if (name === 'resync') void refetch();
+        if (name === 'rider') setRider(JSON.parse(data) as RiderTracking);
         if (name === 'status') {
           const e = JSON.parse(data) as StatusEvent;
           if (e.version > version.current) void refetch();
@@ -35,8 +37,10 @@ export function useLiveOrder(id: string) {
       },
     });
     void refetch();
+    // where the rider is right now (later positions arrive on the stream)
+    api<RiderTracking | undefined>(`/api/orders/${id}/rider`).then((t) => { if (t) setRider(t); }).catch(() => undefined);
     return stop;
   }, [id]);
 
-  return { order, error, live };
+  return { order, error, live, rider };
 }

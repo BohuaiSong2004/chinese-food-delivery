@@ -157,8 +157,7 @@ public class OrderRepository {
 
     /** A rider's deliveries that are not finished yet. */
     public List<Order> activeForRider(long riderId) {
-        return db.sql("select " + COLS + """
-                 from orders where rider_id = ? and status in ('ACCEPTED', 'READY', 'PICKED_UP') order by created_at""")
+        return db.sql("select " + COLS + " from orders where rider_id = ? and status in ('ACCEPTED', 'READY', 'PICKED_UP') order by created_at")
                 .param(riderId).query(OrderRepository::map).list();
     }
 
