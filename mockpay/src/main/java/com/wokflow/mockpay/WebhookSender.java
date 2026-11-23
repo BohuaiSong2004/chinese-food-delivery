@@ -7,51 +7,67 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.support.TransactionTemplate;
 
-/** At-least-once webhook delivery with exponential backoff, like a real provider. */
+/**
+ * At-least-once webhook delivery with exponential backoff, like a real provider.
+ * Due deliveries are claimed with a short lease (in a short transaction), then
+ * sent concurrently; each result is recorded on its own, so one slow receiver
+ * response never holds up the rest, and a crash mid-send just lets the lease
+ * expire and the delivery is retried.
+ */
 @Component
 class WebhookSender {
     private static final Logger log = LoggerFactory.getLogger(WebhookSender.class);
     private static final int MAX_ATTEMPTS = 20;
+    private static final int MAX_IN_FLIGHT = 64;
+    private static final Duration LEASE = Duration.ofSeconds(30);
 
     record Due(long id, String payload, int attempts) {}
 
     private final JdbcClient db;
-    private final TransactionTemplate tx;
     private final MockPayApplication.Props props;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+    private final ExecutorService senders = Executors.newVirtualThreadPerTaskExecutor();
+    private final Semaphore inFlight = new Semaphore(MAX_IN_FLIGHT);
 
-    WebhookSender(JdbcClient db, TransactionTemplate tx, MockPayApplication.Props props) {
+    WebhookSender(JdbcClient db, MockPayApplication.Props props) {
         this.db = db;
-        this.tx = tx;
         this.props = props;
     }
 
-    @Scheduled(fixedDelay = 100)
+    @Scheduled(fixedDelay = 50)
     void deliver() {
-        Integer n;
-        do {
-            n = tx.execute(s -> {
-                List<Due> due = db.sql("""
-                        select id, payload, attempts from webhook_deliveries
-                        where delivered_at is null and attempts < ? and next_attempt_at <= now()
-                        order by id limit 50 for update skip locked""")
-                        .param(MAX_ATTEMPTS)
-                        .query((rs, i) -> new Due(rs.getLong(1), rs.getString(2), rs.getInt(3))).list();
-                // HTTP calls in parallel; the row updates stay on this thread, inside the transaction
-                // that holds the row locks (updating them from other threads would wait on ourselves).
-                record Result(Due due, String error) {}
-                var results = due.parallelStream().map(d -> new Result(d, send(d))).toList();
-                results.forEach(r -> record(r.due(), r.error()));
-                return due.size();
+        int free = inFlight.availablePermits();
+        if (free == 0) {
+            return;
+        }
+        // Claim: a single UPDATE ... RETURNING both selects and leases, so concurrent claimers never overlap.
+        List<Due> due = db.sql("""
+                update webhook_deliveries set next_attempt_at = now() + make_interval(secs => :lease)
+                where id in (select id from webhook_deliveries
+                             where delivered_at is null and attempts < :max and next_attempt_at <= now()
+                             order by id limit :n for update skip locked)
+                returning id, payload, attempts""")
+                .param("lease", (double) LEASE.toSeconds()).param("max", MAX_ATTEMPTS).param("n", free)
+                .query((rs, i) -> new Due(rs.getLong(1), rs.getString(2), rs.getInt(3))).list();
+        for (Due d : due) {
+            inFlight.acquireUninterruptibly();
+            senders.submit(() -> {
+                try {
+                    record(d, send(d));
+                } finally {
+                    inFlight.release();
+                }
             });
-        } while (n != null && n == 50);
+        }
     }
 
     /** Returns null on success, otherwise the error. */
@@ -76,12 +92,8 @@ class WebhookSender {
     private void record(Due d, String error) {
         if (error == null) {
             db.sql("update webhook_deliveries set delivered_at = now(), attempts = attempts + 1 where id = ?").param(d.id()).update();
-        } else {
-            fail(d, error);
+            return;
         }
-    }
-
-    private void fail(Due d, String error) {
         double delay = Math.min(300, Math.pow(2, d.attempts()));
         log.warn("Webhook {} delivery failed (attempt {}): {}", d.id(), d.attempts() + 1, error);
         db.sql("""
