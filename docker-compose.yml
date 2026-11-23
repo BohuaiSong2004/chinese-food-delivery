@@ -1,0 +1,126 @@
+# Full local stack: http://localhost:8000 (web), MockPay checkout on http://localhost:8090.
+# Data lives in named volumes and survives restarts; `docker compose down -v` resets everything.
+name: wokflow
+
+x-api-env: &api-env
+  DB_URL: jdbc:postgresql://postgres:5432/wokflow
+  DB_USER: wokflow
+  DB_PASSWORD: wokflow
+  REDIS_HOST: redis
+  ES_URL: http://elasticsearch:9200
+  PUBLIC_ORIGIN: http://localhost:8000
+  MOCKPAY_URL: http://mockpay:8090
+  MOCKPAY_SECRET_KEY: sk_test_wokflow_local
+  MOCKPAY_WEBHOOK_SECRET: whsec_wokflow_local
+  JWT_PRIVATE_KEY_FILE: /keys/jwt.pem
+  JWT_GENERATE_IF_MISSING: "true"
+  FORWARD_HEADERS_STRATEGY: native   # trust X-Forwarded-For from nginx on the private network
+  SEED_LOADTEST_USERS: ${SEED_LOADTEST_USERS:-0}
+  RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+  JAVA_OPTS: -Xmx384m -XX:+ExitOnOutOfMemoryError
+
+services:
+  postgres:
+    image: postgres:18.7-alpine
+    environment:
+      POSTGRES_USER: wokflow
+      POSTGRES_PASSWORD: wokflow
+      POSTGRES_DB: wokflow
+    command: ["postgres", "-c", "max_connections=200"]
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./deploy/postgres-init.sql:/docker-entrypoint-initdb.d/10-mockpay.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wokflow -d wokflow && psql -U wokflow -d mockpay -c 'select 1' >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.8.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  elasticsearch:
+    image: elasticsearch:9.5.5
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"   # local only; see infra/ for the managed cluster
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      # Single local node: don't refuse shards because the developer's disk is nearly full.
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2s' >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+    restart: unless-stopped
+
+  mockpay:
+    build:
+      context: .
+      dockerfile: mockpay/Dockerfile
+    image: wokflow-mockpay:local
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/mockpay
+      DB_USER: wokflow
+      DB_PASSWORD: wokflow
+      MOCKPAY_SECRET_KEY: sk_test_wokflow_local
+      MOCKPAY_WEBHOOK_SECRET: whsec_wokflow_local
+      MOCKPAY_WEBHOOK_URL: http://web:8000/api/payments/webhook
+      MOCKPAY_PUBLIC_URL: http://localhost:8090
+      MOCKPAY_ALLOWED_RETURN_ORIGINS: http://localhost:8000
+      MOCKPAY_DUPLICATE_RATE: ${MOCKPAY_DUPLICATE_RATE:-0}
+      JAVA_OPTS: -Xmx256m
+    ports:
+      - "8090:8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    image: wokflow-api:local
+    deploy:
+      replicas: 2   # two replicas: live status must reach clients on either one
+    environment: *api-env
+    volumes:
+      - jwtkeys:/keys
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: web
+    image: wokflow-web:local
+    ports:
+      - "8000:8000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  esdata:
+  jwtkeys:

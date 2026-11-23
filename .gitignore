@@ -17,3 +17,5 @@ docker-compose.override.yml
 Dockerfile.sandbox
 sandbox-ca.crt
 loadtest/results/raw/
+*.tsbuildinfo
+*.sandbox.dockerignore
