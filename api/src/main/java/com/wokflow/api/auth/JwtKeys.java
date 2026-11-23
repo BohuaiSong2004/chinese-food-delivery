@@ -43,8 +43,11 @@ public class JwtKeys {
 
     public JwtKeys(AppProperties props) throws GeneralSecurityException, IOException {
         String file = props.jwt().privateKeyFile();
+        String inline = props.jwt().privateKey();
         KeyPair pair;
-        if (file == null || file.isBlank()) {
+        if (inline != null && !inline.isBlank()) {
+            pair = parse(inline, "JWT_PRIVATE_KEY");
+        } else if (file == null || file.isBlank()) {
             log.warn("JWT_PRIVATE_KEY_FILE is not set: using an ephemeral signing key (tokens die with this process)");
             KeyPairGenerator gen = KeyPairGenerator.getInstance("EC");
             gen.initialize(new ECGenParameterSpec("secp256r1"));
@@ -91,7 +94,10 @@ public class JwtKeys {
     }
 
     static KeyPair read(Path path) throws IOException, GeneralSecurityException {
-        String text = Files.readString(path, StandardCharsets.US_ASCII);
+        return parse(Files.readString(path, StandardCharsets.US_ASCII), path.toString());
+    }
+
+    static KeyPair parse(String text, String source) throws GeneralSecurityException {
         byte[] priv = null;
         byte[] pub = null;
         Matcher m = PEM.matcher(text);
@@ -104,7 +110,7 @@ public class JwtKeys {
             }
         }
         if (priv == null || pub == null) {
-            throw new IllegalStateException(path + " must contain a PKCS#8 PRIVATE KEY and a PUBLIC KEY block");
+            throw new IllegalStateException(source + " must contain a PKCS#8 PRIVATE KEY and a PUBLIC KEY block");
         }
         KeyFactory kf = KeyFactory.getInstance("EC");
         return new KeyPair(kf.generatePublic(new X509EncodedKeySpec(pub)), kf.generatePrivate(new PKCS8EncodedKeySpec(priv)));
