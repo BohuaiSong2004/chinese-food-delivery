@@ -14,8 +14,8 @@ public record AppProperties(
         Seed seed,
         Outbox outbox) {
 
-    public record Jwt(String issuer, String privateKeyFile, Duration accessTtl, Duration refreshTtl,
-                      boolean refreshCookieSecure) {}
+    public record Jwt(String issuer, String privateKeyFile, boolean generateIfMissing, Duration accessTtl,
+                      Duration refreshTtl, boolean refreshCookieSecure) {}
 
     public record Payments(String baseUrl, String secretKey, String webhookSecret,
                            Duration webhookTolerance, Duration paymentWindow) {}

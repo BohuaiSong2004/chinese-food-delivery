@@ -21,6 +21,24 @@ class JwtKeysTest {
     }
 
     @Test
+    void racingReplicasEndUpWithTheSameGeneratedKey() throws Exception {
+        Path file = dir.resolve("shared.pem");
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(8);
+        var futures = new java.util.ArrayList<java.util.concurrent.Future<java.security.KeyPair>>();
+        for (int i = 0; i < 8; i++) {
+            futures.add(pool.submit(() -> JwtKeys.createShared(file)));
+        }
+        var first = futures.getFirst().get().getPublic();
+        for (var f : futures) {
+            assertThat(f.get().getPublic()).isEqualTo(first);
+        }
+        pool.shutdown();
+        try (var files = Files.list(dir)) {
+            assertThat(files.map(p -> p.getFileName().toString()).toList()).containsExactly("shared.pem"); // no temp files left
+        }
+    }
+
+    @Test
     void readsTheOpensslLayoutAndRejectsAFileWithoutThePublicKey() throws Exception {
         var gen = KeyPairGenerator.getInstance("EC");
         gen.initialize(new ECGenParameterSpec("secp256r1"));
