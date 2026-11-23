@@ -1,15 +1,18 @@
 import { createBrowserRouter, Link, Navigate, RouterProvider } from 'react-router';
-import type { ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
 import { Search } from './pages/Search';
 import { Restaurant } from './pages/Restaurant';
-import { Cart } from './pages/Cart';
-import { Order } from './pages/Order';
-import { Orders } from './pages/Orders';
 import { SignIn } from './pages/Auth';
-import { Kitchen } from './pages/Kitchen';
-import { Rider } from './pages/Rider';
+
+// Pages most visitors never open are split out, so the browse path downloads less JavaScript.
+const Cart = lazy(() => import('./pages/Cart').then((m) => ({ default: m.Cart })));
+const Order = lazy(() => import('./pages/Order').then((m) => ({ default: m.Order })));
+const Orders = lazy(() => import('./pages/Orders').then((m) => ({ default: m.Orders })));
+const Kitchen = lazy(() => import('./pages/Kitchen').then((m) => ({ default: m.Kitchen })));
+const Rider = lazy(() => import('./pages/Rider').then((m) => ({ default: m.Rider })));
+const page = (el: ReactNode) => <Suspense fallback={<Loading />}>{el}</Suspense>;
 import { useAuth } from './lib/auth';
 import { useI18n } from './lib/i18n';
 import type { Role } from './lib/api';
@@ -35,13 +38,13 @@ const router = createBrowserRouter([
       { path: '/', element: <Home /> },
       { path: '/search', element: <Search /> },
       { path: '/r/:slug', element: <Restaurant /> },
-      { path: '/cart', element: <Cart /> },
-      { path: '/orders', element: <RequireRole roles={['CUSTOMER']}><Orders /></RequireRole> },
-      { path: '/orders/:id', element: <RequireRole roles={['CUSTOMER', 'ADMIN']}><Order /></RequireRole> },
+      { path: '/cart', element: page(<Cart />) },
+      { path: '/orders', element: <RequireRole roles={['CUSTOMER']}>{page(<Orders />)}</RequireRole> },
+      { path: '/orders/:id', element: <RequireRole roles={['CUSTOMER', 'ADMIN']}>{page(<Order />)}</RequireRole> },
       { path: '/signin', element: <SignIn mode="signin" /> },
       { path: '/signup', element: <SignIn mode="signup" /> },
-      { path: '/kitchen', element: <RequireRole roles={['MERCHANT', 'ADMIN']}><Kitchen /></RequireRole> },
-      { path: '/rider', element: <RequireRole roles={['RIDER']}><Rider /></RequireRole> },
+      { path: '/kitchen', element: <RequireRole roles={['MERCHANT', 'ADMIN']}>{page(<Kitchen />)}</RequireRole> },
+      { path: '/rider', element: <RequireRole roles={['RIDER']}>{page(<Rider />)}</RequireRole> },
       { path: '*', element: <NotFound /> },
     ],
   },
