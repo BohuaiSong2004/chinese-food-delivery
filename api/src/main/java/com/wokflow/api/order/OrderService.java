@@ -40,20 +40,25 @@ public class OrderService {
 
     private final OrderRepository orders;
     private final OrderTransitions transitions;
+    private final StockReservations stock;
     private final CatalogRepository catalog;
     private final PaymentService payments;
     private final Outbox outbox;
     private final RateLimiter limiter;
+    private final com.wokflow.api.common.Bulkhead placements;
     private final Tx tx;
     private final JdbcClient db;
     private final Clock clock;
     private final AppProperties props;
 
-    public OrderService(OrderRepository orders, OrderTransitions transitions, CatalogRepository catalog,
+    public OrderService(OrderRepository orders, OrderTransitions transitions, StockReservations stock, CatalogRepository catalog,
                         PaymentService payments, Outbox outbox, RateLimiter limiter, Tx tx, JdbcClient db, Clock clock,
-                        AppProperties props) {
+                        AppProperties props, io.micrometer.core.instrument.MeterRegistry meters) {
+        this.placements = new com.wokflow.api.common.Bulkhead("order-placement", props.orders().placementConcurrency(),
+                props.orders().placementWait(), meters);
         this.orders = orders;
         this.transitions = transitions;
+        this.stock = stock;
         this.catalog = catalog;
         this.payments = payments;
         this.outbox = outbox;
@@ -89,7 +94,7 @@ public class OrderService {
             throw new ApiException(HttpStatus.FORBIDDEN, "customers_only", "Only customer accounts can place orders");
         }
         limiter.check("orders", Long.toString(user.id()), 30, Duration.ofMinutes(1));
-        Map<Long, Integer> qty = new TreeMap<>(); // ascending dish id: the global lock order
+        Map<Long, Integer> qty = new TreeMap<>(); // ascending dish id: the order stock is reserved in
         for (ItemRequest i : req.items()) {
             qty.merge(i.dishId(), i.quantity(), Integer::sum);
         }
@@ -98,60 +103,98 @@ public class OrderService {
         }
         String hash = requestHash(req.restaurantId(), qty, req.deliveryAddress(), req.deliveryNotes());
 
-        Outcome outcome = tx.run(() -> {
+        Outcome outcome = placements.run(() -> {
             var existing = orders.findByKey(user.id(), idempotencyKey);
             if (existing.isPresent()) {
                 return replay(existing.get(), hash);
             }
-            Restaurant r = catalog.restaurant(req.restaurantId()).orElseThrow(() -> ApiException.notFound("Restaurant"));
-            Instant now = clock.instant();
-            if (!r.acceptingOrders()) {
-                throw ApiException.conflict("restaurant_paused", r.name() + " is not taking orders right now");
-            }
-            if (!r.isOpenAt(now)) {
-                throw ApiException.conflict("restaurant_closed", r.name() + " is closed; it opens at " + r.nextOpening(now));
-            }
-            Map<Long, Dish> dishes = catalog.dishesById(qty.keySet()).stream()
-                    .collect(Collectors.toMap(Dish::id, Function.identity()));
-            int subtotal = 0;
-            List<Line> lines = new java.util.ArrayList<>();
-            for (var e : qty.entrySet()) {
-                Dish d = dishes.get(e.getKey());
-                if (d == null || d.restaurantId() != r.id()) {
-                    throw ApiException.badRequest("unknown_dish", "Dish " + e.getKey() + " is not on this menu");
-                }
-                if (!d.available()) {
-                    throw ApiException.conflict("dish_unavailable", d.name() + " is not available right now");
-                }
-                subtotal += d.priceCents() * e.getValue();
-                lines.add(new Line(d.id(), d.name(), d.nameZh(), d.priceCents(), e.getValue()));
-            }
-            if (subtotal < r.minOrderCents()) {
-                throw ApiException.badRequest("below_minimum", "Minimum order is " + r.minOrderCents() + " cents");
-            }
-            int commission = (int) Math.round(subtotal * r.commissionBps() / 10_000.0);
+            Priced priced = price(req, qty);
             UUID id = UUID.randomUUID();
-            if (!orders.insertIfAbsent(id, user.id(), r.id(), subtotal, r.deliveryFeeCents(), commission,
-                    req.deliveryAddress().strip(), req.deliveryNotes() == null ? "" : req.deliveryNotes().strip(),
-                    idempotencyKey, hash, now.plus(props.payments().paymentWindow()))) {
-                // A concurrent request with the same key won; its row is committed by now.
-                return replay(orders.findByKey(user.id(), idempotencyKey).orElseThrow(), hash);
-            }
-            for (var e : qty.entrySet()) {
-                if (dishes.get(e.getKey()).limited() && !orders.reserveStock(e.getKey(), e.getValue())) {
-                    throw ApiException.conflict("sold_out", dishes.get(e.getKey()).name() + " just sold out");
+            Map<Long, Integer> limited = new TreeMap<>();
+            qty.forEach((dish, n) -> {
+                if (priced.dishes().get(dish).limited()) {
+                    limited.put(dish, n);
                 }
+            });
+            var soldOut = stock.reserve(id, limited);
+            if (soldOut.isPresent()) {
+                throw ApiException.conflict("sold_out", priced.dishes().get(soldOut.get()).name() + " just sold out");
             }
-            orders.insertItems(id, lines);
-            orders.insertHistory(id, 1, OrderStatus.PENDING_PAYMENT, user.id(), null);
-            db.sql("insert into payments (id, order_id, status, amount_cents) values (?, ?, 'CREATING', ?)")
-                    .params(UUID.randomUUID(), id, subtotal + r.deliveryFeeCents()).update();
-            outbox.publish(Outbox.ORDER_STATUS, id.toString(), new StatusEvent(id, r.id(), user.id(), null,
-                    OrderStatus.PENDING_PAYMENT, null, 1, now, null));
-            return new Outcome(id, true);
+            try {
+                return tx.run(() -> create(user, req, idempotencyKey, hash, id, priced));
+            } catch (Replayed r) {
+                stock.release(id);
+                return r.outcome;
+            } catch (RuntimeException e) {
+                stock.release(id); // the order did not commit: give the stock back now
+                throw e;
+            }
         });
         payments.ensureCheckout(outcome.id());
         return new Placed(view(orders.find(outcome.id()).orElseThrow()), outcome.created());
+    }
+
+    private record Priced(Restaurant restaurant, Map<Long, Dish> dishes, List<Line> lines, int subtotal, int commission, Instant now) {}
+
+    /** Validates against the database (prices come from here, never from the client). Read-only. */
+    private Priced price(PlaceOrder req, Map<Long, Integer> qty) {
+        Restaurant r = catalog.restaurant(req.restaurantId()).orElseThrow(() -> ApiException.notFound("Restaurant"));
+        Instant now = clock.instant();
+        if (!r.acceptingOrders()) {
+            throw ApiException.conflict("restaurant_paused", r.name() + " is not taking orders right now");
+        }
+        if (!r.isOpenAt(now)) {
+            throw ApiException.conflict("restaurant_closed", r.name() + " is closed; it opens at " + r.nextOpening(now));
+        }
+        Map<Long, Dish> dishes = catalog.dishesById(qty.keySet()).stream()
+                .collect(Collectors.toMap(Dish::id, Function.identity()));
+        int subtotal = 0;
+        List<Line> lines = new java.util.ArrayList<>();
+        for (var e : qty.entrySet()) {
+            Dish d = dishes.get(e.getKey());
+            if (d == null || d.restaurantId() != r.id()) {
+                throw ApiException.badRequest("unknown_dish", "Dish " + e.getKey() + " is not on this menu");
+            }
+            if (!d.available()) {
+                throw ApiException.conflict("dish_unavailable", d.name() + " is not available right now");
+            }
+            subtotal += d.priceCents() * e.getValue();
+            lines.add(new Line(d.id(), d.name(), d.nameZh(), d.priceCents(), e.getValue()));
+        }
+        if (subtotal < r.minOrderCents()) {
+            throw ApiException.badRequest("below_minimum", "Minimum order is " + r.minOrderCents() + " cents");
+        }
+        return new Priced(r, dishes, lines, subtotal, (int) Math.round(subtotal * r.commissionBps() / 10_000.0), now);
+    }
+
+    /** The order transaction. Touches no dish rows, so it never waits on a popular dish. */
+    private Outcome create(CurrentUser user, PlaceOrder req, String key, String hash, UUID id, Priced p) {
+        Restaurant r = p.restaurant();
+        if (!orders.insertIfAbsent(id, user.id(), r.id(), p.subtotal(), r.deliveryFeeCents(), p.commission(),
+                req.deliveryAddress().strip(), req.deliveryNotes() == null ? "" : req.deliveryNotes().strip(),
+                key, hash, p.now().plus(props.payments().paymentWindow()))) {
+            // A concurrent request with the same key won; its row is committed by now. Our holds are released by the caller.
+            Outcome replayed = replay(orders.findByKey(user.id(), key).orElseThrow(), hash);
+            throw new Replayed(replayed);
+        }
+        orders.insertItems(id, p.lines());
+        orders.insertHistory(id, 1, OrderStatus.PENDING_PAYMENT, user.id(), null);
+        db.sql("insert into payments (id, order_id, status, amount_cents) values (?, ?, 'CREATING', ?)")
+                .params(UUID.randomUUID(), id, p.subtotal() + r.deliveryFeeCents()).update();
+        outbox.publish(Outbox.ORDER_STATUS, id.toString(), new StatusEvent(id, r.id(), user.id(), null,
+                OrderStatus.PENDING_PAYMENT, null, 1, p.now(), null));
+        stock.confirm(id);
+        return new Outcome(id, true);
+    }
+
+    /** Signals "same key, already created" out of the transaction so the reserved stock is released. */
+    private static final class Replayed extends RuntimeException {
+        final Outcome outcome;
+
+        Replayed(Outcome o) {
+            super(null, null, false, false);
+            this.outcome = o;
+        }
     }
 
     private static String requestHash(long restaurantId, Map<Long, Integer> qty, String address, String notes) {
