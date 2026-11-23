@@ -118,6 +118,11 @@ class AuthIT extends IntegrationTest {
     }
 
     @Test
+    void refreshWithoutACookieIsJustSignedOut() {
+        assertThat(http.raw("POST", "/api/auth/refresh", null, Map.of()).status()).isEqualTo(204);
+    }
+
+    @Test
     void jwksPublishesTheVerificationKey() {
         var jwks = http.get("/.well-known/jwks.json", null).body();
         assertThat(jwks.get("keys").get(0).get("kty").asText()).isEqualTo("EC");

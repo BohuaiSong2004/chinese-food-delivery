@@ -22,7 +22,7 @@ export function hasAccessToken() { return accessToken !== null; }
 /** One refresh at a time, shared by every request that hit a 401 meanwhile. */
 export function refreshSession(): Promise<Session | null> {
   refreshing ??= fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' })
-    .then(async (r) => (r.ok ? ((await r.json()) as Session) : null))
+    .then(async (r) => (r.status === 200 ? ((await r.json()) as Session) : null)) // 204: not signed in
     .catch(() => null)
     .then((s) => {
       accessToken = s?.accessToken ?? null;

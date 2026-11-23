@@ -56,13 +56,19 @@ public class AuthController {
         return respond(auth.signIn(req.email(), req.password(), http.getRemoteAddr()), res);
     }
 
-    /** Cookie-authenticated, so it checks Origin (SameSite=Strict is the first line of defence). */
+    /**
+     * Cookie-authenticated, so it checks Origin (SameSite=Strict is the first line of defence).
+     * No cookie at all is the normal signed-out state, answered with 204 rather than an error.
+     */
     @PostMapping("/refresh")
-    SessionView refresh(@CookieValue(name = COOKIE, required = false) String token, HttpServletRequest http,
-                        HttpServletResponse res) {
+    org.springframework.http.ResponseEntity<SessionView> refresh(@CookieValue(name = COOKIE, required = false) String token,
+                                                                 HttpServletRequest http, HttpServletResponse res) {
         requireSameOrigin(http);
+        if (token == null || token.isBlank()) {
+            return org.springframework.http.ResponseEntity.noContent().build();
+        }
         try {
-            return respond(auth.refresh(token), res);
+            return org.springframework.http.ResponseEntity.ok(respond(auth.refresh(token), res));
         } catch (ApiException e) {
             clearCookie(res);
             throw e;
