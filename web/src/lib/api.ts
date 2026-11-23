@@ -35,7 +35,11 @@ export function refreshSession(): Promise<Session | null> {
 
 interface Options { method?: string; body?: unknown; headers?: Record<string, string>; signal?: AbortSignal }
 
-export async function api<T>(path: string, opts: Options = {}, retried = false): Promise<T> {
+/**
+ * GETs, and writes that are safe to repeat (an Idempotency-Key, or an If-Match version that makes a
+ * second attempt fail instead of acting twice), are retried when the server says it is busy (503).
+ */
+export async function api<T>(path: string, opts: Options = {}, retried = false, busyRetries = 3): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
@@ -49,6 +53,12 @@ export async function api<T>(path: string, opts: Options = {}, retried = false):
   if (res.status === 401 && !retried && !path.startsWith('/api/auth/')) {
     const s = await refreshSession();
     if (s) return api<T>(path, opts, true);
+  }
+  const safeToRepeat = (opts.method ?? 'GET') === 'GET' || 'Idempotency-Key' in headers || 'If-Match' in headers;
+  if (res.status === 503 && safeToRepeat && busyRetries > 0) {
+    const wait = Number(res.headers.get('Retry-After') ?? '1');
+    await new Promise((r) => setTimeout(r, Math.min(5, Math.max(1, wait)) * 1000));
+    return api<T>(path, opts, retried, busyRetries - 1);
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
