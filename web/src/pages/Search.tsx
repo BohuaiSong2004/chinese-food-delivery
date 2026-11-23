@@ -64,7 +64,7 @@ export function Search() {
           )}
         </aside>
 
-        <section aria-live="polite" aria-busy={!res.data && !res.error}>
+        <section aria-live="polite" aria-busy={res.loading && !res.error} className={res.loading && res.data ? 'stale' : undefined}>
           {res.error ? <ErrorBox error={res.error} retry={res.reload} /> : !res.data ? <Loading /> : (
             <>
               {res.data.degraded && <p className="notice">{t('search.degraded')}</p>}

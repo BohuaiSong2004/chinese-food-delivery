@@ -48,9 +48,10 @@ export function Kitchen() {
         ))}
       </div>
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === 'board' && <Board rid={current.id} />}
-        {tab === 'menu' && <Menu rid={current.id} />}
-        {tab === 'earnings' && <Earnings rid={current.id} />}
+        {/* keyed by restaurant: switching never leaves the previous kitchen's orders on screen */}
+        {tab === 'board' && <Board key={current.id} rid={current.id} />}
+        {tab === 'menu' && <Menu key={current.id} rid={current.id} />}
+        {tab === 'earnings' && <Earnings key={current.id} rid={current.id} />}
       </div>
     </section>
   );

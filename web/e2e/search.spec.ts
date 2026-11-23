@@ -22,12 +22,14 @@ test('tag filters narrow results and survive in the URL', async ({ page }) => {
   await page.getByLabel(/^Vegan/).click();
   await expect(page).toHaveURL(/tag=vegan/);
   await expect(page.getByLabel(/^Vegan/)).toBeChecked();
-  await expect(page.locator('.dish-hit').first()).toBeVisible();
+  // results for the new filter, not the previous ones still on screen while it loads
+  await expect(page.locator('section[aria-busy="false"] .dish-hit').first()).toBeVisible();
   for (const tags of await page.locator('.dish-hit .tags').allInnerTexts()) {
     expect(tags).toContain('Vegan');
   }
   await page.getByLabel('Maximum spice').selectOption('0');
   await expect(page).toHaveURL(/maxSpice=0/);
+  await expect(page.locator('section[aria-busy="false"]')).toBeVisible();
   await expect(page.locator('.spice')).toHaveCount(0);
 });
 

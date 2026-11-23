@@ -22,7 +22,7 @@ export function Restaurant() {
   }, [menu.data]);
 
   if (menu.error) return <ErrorBox error={menu.error} retry={menu.reload} />;
-  if (!menu.data) return <Loading />;
+  if (!menu.data || menu.loading) return <Loading />; // never show the previous restaurant's menu
   const r = menu.data.restaurant;
   const ref: RestaurantRef = { id: r.id, slug: r.slug, name: r.name, nameZh: r.nameZh, deliveryFeeCents: r.deliveryFeeCents, minOrderCents: r.minOrderCents };
   const canOrder = r.openNow && r.acceptingOrders && (!user || user.role === 'CUSTOMER');
