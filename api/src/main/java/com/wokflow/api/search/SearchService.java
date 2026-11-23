@@ -129,6 +129,11 @@ public class SearchService {
             }
             if (compact.length() >= 2 && compact.length() <= 8) {
                 should.add(Query.of(q -> q.term(t -> t.field("pinyin_initials").value(compact).boost(4f))));
+                // initials of part of the name: "xlb" inside 鲜肉小笼包 (xrxlb)
+                should.add(Query.of(q -> q.match(m -> m.field("pinyin_initials.grams").query(compact).boost(1.5f))));
+            }
+            if (compact.length() >= 4) {
+                should.add(Query.of(q -> q.prefix(p -> p.field("name_joined").value(compact).boost(2f))));
             }
         }
         return Query.of(q -> q.bool(b -> b.should(should).minimumShouldMatch("1")));
