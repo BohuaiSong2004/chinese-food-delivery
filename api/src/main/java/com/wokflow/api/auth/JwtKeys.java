@@ -73,7 +73,9 @@ public class JwtKeys {
         KeyPairGenerator gen = KeyPairGenerator.getInstance("EC");
         gen.initialize(new ECGenParameterSpec("secp256r1"));
         KeyPair mine = gen.generateKeyPair();
-        Path tmp = Files.createTempFile(path.toAbsolutePath().getParent(), ".jwt", ".tmp");
+        Path dir = path.toAbsolutePath().getParent();
+        Files.createDirectories(dir);
+        Path tmp = Files.createTempFile(dir, ".jwt", ".tmp");
         try {
             Files.writeString(tmp, pem("PRIVATE KEY", mine.getPrivate().getEncoded()) + pem("PUBLIC KEY", mine.getPublic().getEncoded()));
             try {

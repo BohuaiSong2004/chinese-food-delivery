@@ -22,7 +22,7 @@ class JwtKeysTest {
 
     @Test
     void racingReplicasEndUpWithTheSameGeneratedKey() throws Exception {
-        Path file = dir.resolve("shared.pem");
+        Path file = dir.resolve("keys").resolve("shared.pem"); // parent created on demand
         var pool = java.util.concurrent.Executors.newFixedThreadPool(8);
         var futures = new java.util.ArrayList<java.util.concurrent.Future<java.security.KeyPair>>();
         for (int i = 0; i < 8; i++) {
@@ -33,7 +33,7 @@ class JwtKeysTest {
             assertThat(f.get().getPublic()).isEqualTo(first);
         }
         pool.shutdown();
-        try (var files = Files.list(dir)) {
+        try (var files = Files.list(file.getParent())) {
             assertThat(files.map(p -> p.getFileName().toString()).toList()).containsExactly("shared.pem"); // no temp files left
         }
     }
