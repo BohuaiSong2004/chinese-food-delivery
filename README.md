@@ -129,17 +129,18 @@ API docs: http://localhost:8080/api/docs (OpenAPI at `/api/openapi.json`).
 ## Tests
 
 ```bash
-mvn verify                       # 76 backend tests on real Postgres, Redis and Elasticsearch (Testcontainers); JaCoCo report
+mvn verify                       # 77 backend tests (81 runs) on real Postgres, Redis and Elasticsearch (Testcontainers); JaCoCo report
 cd web && npm run lint && npm run typecheck && npm test
 cd web && E2E_BASE_URL=http://localhost:8000 npx playwright test     # against the compose stack
 ```
 
-- Backend (API line coverage 88.6%, branch 72.9%): auth (tampering, `alg: none`, expiry, refresh reuse),
+- Backend (API line coverage 88.8%, branch 73.3%): auth (tampering, `alg: none`, expiry, refresh reuse),
   the order lifecycle and every refusal, webhooks (signature, replay window, duplicates), refunds with a
   provider outage, payment expiry and late payments, concurrency (200 customers racing for 50 baskets,
   accept vs cancel, rider claims, webhook storms, concurrent payouts, concurrent retries of one order),
   ledger constraints, a deadlock negative control (so "0 deadlocks" means something), search relevance and
-  self-healing, hot-menu counting and rebuild, SSE, outbox retries, rate limits, opening hours across DST.
+  self-healing, hot-menu counting and rebuild, SSE, outbox retries, rate limits, opening hours across DST,
+  the daily restock and the clean-up jobs (the things that only break days later).
 - End to end (Playwright, Chromium + mobile, Firefox, WebKit, all in CI against the Docker stack): a
   customer, a kitchen and a rider in separate browsers moving one order to the door while the customer
   watches it update; declined payment; a stale kitchen screen; search in three scripts; the Chinese UI;
