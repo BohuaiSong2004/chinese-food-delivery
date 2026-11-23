@@ -124,7 +124,20 @@ public class SearchIndexer implements OutboxHandler {
     @EventListener(ApplicationReadyEvent.class)
     void onStartup() {
         if (reindexOnStartup) {
-            Thread.ofVirtual().name("search-bootstrap").start(this::ensureReady);
+            // Keep checking every 2 s for a while: if another replica is building the index, this one
+            // should start using it as soon as the alias appears, not at the next 1-minute check.
+            Thread.ofVirtual().name("search-bootstrap").start(() -> {
+                for (int i = 0; i < 90 && !ready.get(); i++) {
+                    ensureReady();
+                    if (!ready.get()) {
+                        try {
+                            Thread.sleep(2000);
+                        } catch (InterruptedException e) {
+                            return;
+                        }
+                    }
+                }
+            });
         }
     }
 
