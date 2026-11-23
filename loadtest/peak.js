@@ -1,7 +1,8 @@
 // Peak-hour burst: N customers place orders at the same instant, then every order is paid and
 // carried through the kitchen and a rider to the door, all concurrently.
 //
-//   docker run --rm --network host -v "$PWD:/lt" grafana/k6:2.4.0 run -e VUS=600 /lt/peak.js
+//   docker run --rm --network host -v "$PWD:/lt" grafana/k6:2.4.0 run -e VUS=600 /lt/peak.js          (all at once)
+//   docker run --rm --network host -v "$PWD:/lt" grafana/k6:2.4.0 run -e VUS=1000 -e RATE=10 /lt/peak.js (10 orders/s for 60 s)
 //
 // Needs the stack started with SEED_LOADTEST_USERS >= VUS and RATE_LIMIT_ENABLED=false (one
 // machine is every "customer", so per-IP limits would only measure the limiter). Run prepare.sh first.
@@ -26,9 +27,11 @@ const retried = new Counter('retries_after_503');
 
 export const options = {
   setupTimeout: '10m',
-  scenarios: {
-    burst: { executor: 'per-vu-iterations', vus: VUS, iterations: 1, maxDuration: '10m' },
-  },
+  scenarios: __ENV.RATE
+    // steady rush: RATE new orders per second for 60 s
+    ? { steady: { executor: 'constant-arrival-rate', rate: Number(__ENV.RATE), timeUnit: '1s', duration: '60s', preAllocatedVUs: VUS, maxVUs: VUS } }
+    // everyone at once
+    : { burst: { executor: 'per-vu-iterations', vus: VUS, iterations: 1, maxDuration: '10m' } },
   thresholds: {
     unexpected_responses: ['count==0'],
     stale_reads: ['count==0'],
@@ -68,8 +71,16 @@ function verifyRead(token, id, version) {
 }
 
 function transition(token, url, version, expect = 200) {
-  const r = http.post(url, null, auth(token, { 'If-Match': `"${version}"` }));
-  transitionLatency.add(r.timings.duration);
+  const started = Date.now();
+  let r;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    // safe to resend: If-Match makes a duplicate fail with 409 instead of acting twice
+    r = http.post(url, null, auth(token, { 'If-Match': `"${version}"` }));
+    if (r.status !== 503) break;
+    retried.add(1);
+    sleep(Number(r.headers['Retry-After'] || 1));
+  }
+  transitionLatency.add(Date.now() - started);
   if (r.status !== expect) {
     unexpected.add(1);
     console.error(`${url} -> ${r.status} ${r.body}`);
@@ -79,7 +90,7 @@ function transition(token, url, version, expect = 200) {
 }
 
 export default function (data) {
-  const i = exec.vu.idInTest - 1;
+  const i = (__ENV.RATE ? exec.scenario.iterationInTest : exec.vu.idInTest - 1) % data.customers.length;
   const customer = data.customers[i];
   const r = data.restaurants[i % 2];
   const items = [];

@@ -1,0 +1,16 @@
+200 streams connected
+{
+  "streams": 200,
+  "driveSeconds": "5.0",
+  "eventsReceived": 1199,
+  "expectedEvents": 1200,
+  "latencyMs": {
+    "p50": 227,
+    "p95": 538,
+    "p99": 844,
+    "max": 1187
+  },
+  "clientsEndingOnDelivered": 200,
+  "versionRegressions": 0,
+  "duplicateOrOlderEventsIgnored": 1
+}
