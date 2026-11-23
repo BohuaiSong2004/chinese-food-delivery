@@ -53,7 +53,8 @@ public class AuthService {
     public String hash(String password) { return hasher.encode(password); }
 
     public Session signUp(String email, String password, String name, String clientIp) {
-        limiter.check("signup", clientIp, 20, Duration.ofHours(1));
+        // Generous enough for a campus or office NAT; still stops scripted mass sign-ups.
+        limiter.check("signup", clientIp, 60, Duration.ofHours(1));
         String normalized = normalize(email);
         String hash = hasher.encode(password);
         long id = users.insert(normalized, hash, name.strip(), Role.CUSTOMER)
