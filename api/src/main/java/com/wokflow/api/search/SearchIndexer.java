@@ -11,7 +11,6 @@ import com.wokflow.api.outbox.OutboxHandler;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -73,6 +72,7 @@ public class SearchIndexer implements OutboxHandler {
     private final boolean reindexOnStartup;
     private final Clock clock;
     private final AtomicBoolean ready = new AtomicBoolean();
+    private final tools.jackson.databind.ObjectMapper json = tools.jackson.databind.json.JsonMapper.builder().build();
 
     public SearchIndexer(ElasticsearchClient es, JdbcClient db, DataSource dataSource, CatalogRepository catalog,
                          AppProperties props, Clock clock) {
@@ -86,6 +86,23 @@ public class SearchIndexer implements OutboxHandler {
     }
 
     public String alias() { return alias; }
+
+    /** The mapping file's hash, stored in the index's _meta: a changed mapping means a rebuild. */
+    static String mappingHash() throws IOException {
+        try (InputStream in = new ClassPathResource("search/dishes-index.json").getInputStream()) {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(in.readAllBytes());
+            return java.util.HexFormat.of().formatHex(d).substring(0, 16);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    String liveMappingHash() throws IOException {
+        var res = es.indices().getMapping(g -> g.index(alias));
+        return res.mappings().values().stream().findFirst()
+                .map(m -> m.mappings().meta() == null ? null : m.mappings().meta().get("mapping_hash"))
+                .map(v -> v.to(String.class)).orElse(null);
+    }
 
     public boolean isReady() { return ready.get(); }
 
@@ -119,11 +136,16 @@ public class SearchIndexer implements OutboxHandler {
             if (aliasExists()) {
                 es.indices().refresh(r -> r.index(alias));
                 long esCount = es.count(c -> c.index(alias)).count();
-                if (esCount == dbCount) {
+                String live = liveMappingHash();
+                if (esCount == dbCount && mappingHash().equals(live)) {
                     ready.set(true);
                     return;
                 }
-                log.warn("Search index has {} documents but Postgres has {} dishes: rebuilding", esCount, dbCount);
+                if (!mappingHash().equals(live)) {
+                    log.info("Search mapping changed ({} -> {}): rebuilding the index", live, mappingHash());
+                } else {
+                    log.warn("Search index has {} documents but Postgres has {} dishes: rebuilding", esCount, dbCount);
+                }
             } else {
                 log.info("Search index alias '{}' missing: building", alias);
             }
@@ -145,7 +167,10 @@ public class SearchIndexer implements OutboxHandler {
                 Instant started = clock.instant();
                 String name = alias + "_" + SUFFIX.format(started);
                 try (InputStream in = new ClassPathResource("search/dishes-index.json").getInputStream()) {
-                    String mapping = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                    // _meta goes into the JSON itself: setting mappings on the builder would replace the file's mappings.
+                    var tree = (tools.jackson.databind.node.ObjectNode) json.readTree(in);
+                    ((tools.jackson.databind.node.ObjectNode) tree.get("mappings")).putObject("_meta").put("mapping_hash", mappingHash());
+                    String mapping = json.writeValueAsString(tree);
                     es.indices().create(c -> c.index(name).withJson(new StringReader(mapping)));
                 }
                 List<DishDocument> all = docs("", null);
@@ -227,10 +252,16 @@ public class SearchIndexer implements OutboxHandler {
         Pinyin.Reading py = Pinyin.of(nameZh);
         return new DishDocument(rs.getLong("id"), rs.getLong("restaurant_id"), rs.getString("slug"),
                 rs.getString("rname"), rs.getString("rname_zh"), rs.getString("cuisine"), rs.getString("neighborhood"),
-                rs.getString("name"), nameZh, py.syllables(), py.joined(), py.initials(), rs.getString("description"),
+                rs.getString("name"), nameZh, joined(rs.getString("name")), py.syllables(), py.joined(), py.initials(),
+                rs.getString("description"),
                 List.of((String[]) rs.getArray("tags").getArray()), rs.getInt("spice_level"), rs.getInt("price_cents"),
                 rs.getBoolean("available"), rs.getBoolean("accepting_orders"), rs.getDouble("popularity"),
                 rs.getLong("doc_version"));
+    }
+
+    /** "Biang Biang Noodles" -> "biangbiangnoodles", so a run-together English query still finds it. */
+    static String joined(String name) {
+        return name.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]", "");
     }
 
     private static boolean tryLock(Connection c) throws java.sql.SQLException {
