@@ -128,7 +128,7 @@ public class SearchIndexer implements OutboxHandler {
                 log.info("Search index alias '{}' missing: building", alias);
             }
             reindexAll();
-            ready.set(true);
+            ready.set(aliasExists()); // false if another replica is still building; the next check picks it up
         } catch (Exception e) {
             log.warn("Search index not ready yet ({}); search falls back to Postgres", e.toString());
         }
