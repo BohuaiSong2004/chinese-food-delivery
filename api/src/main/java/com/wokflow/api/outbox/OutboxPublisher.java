@@ -77,8 +77,10 @@ public class OutboxPublisher implements SmartLifecycle {
     @Override
     public void start() {
         running.set(true);
-        worker = Thread.ofVirtual().name("outbox-worker").start(this::workLoop);
-        listener = Thread.ofVirtual().name("outbox-listen").start(this::listenLoop);
+        // Platform threads: both loops block for long periods (Object.wait, a JDBC socket read), which on
+        // Java 21 pins a virtual thread's carrier, and a 2-core box only has two carriers.
+        worker = Thread.ofPlatform().daemon().name("outbox-worker").start(this::workLoop);
+        listener = Thread.ofPlatform().daemon().name("outbox-listen").start(this::listenLoop);
     }
 
     @Override
