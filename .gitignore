@@ -1,0 +1,19 @@
+target/
+*.log
+.idea/
+.vscode/
+*.iml
+.DS_Store
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.env
+*.pem
+secrets/
+# local sandbox-only build helpers (never commit)
+docker-compose.override.yml
+Dockerfile.sandbox
+sandbox-ca.crt
+loadtest/results/raw/
