@@ -88,7 +88,7 @@ test('protected pages send you to sign in and back', async ({ page }) => {
   await page.goto('/kitchen');
   await expect(page).toHaveURL(/\/signin\?next=%2Fkitchen/);
   await page.getByLabel('Email').fill('merchant@example.com');
-  await page.getByLabel('Password').fill('wokflow-demo');
+  await page.getByLabel('Password', { exact: true }).fill('wokflow-demo');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: 'Kitchen' })).toBeVisible();
 });

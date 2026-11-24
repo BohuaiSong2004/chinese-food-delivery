@@ -48,6 +48,7 @@ export function SignIn({ mode }: { mode: 'signin' | 'signup' }) {
   return (
     <section className="auth">
       <h1>{signup ? t('auth.signUp') : t('auth.signIn')}</h1>
+      {!signup && params.get('reset') === '1' && <p className="notice" role="status">{t('pw.resetDone')}</p>}
       <form method="post" onSubmit={submit}>
         {signup && (
           <fieldset className="account-type">
@@ -70,6 +71,7 @@ export function SignIn({ mode }: { mode: 'signin' | 'signup' }) {
           autoComplete={signup ? 'new-password' : 'current-password'} value={password} onChange={(e) => setPassword(e.target.value)}
           aria-describedby={signup ? 'pw-hint' : undefined} />
         {signup && <p id="pw-hint" className="muted">{t('auth.passwordHint')}</p>}
+        {!signup && <p className="forgot"><Link to="/forgot">{t('pw.forgotLink')}</Link></p>}
         {error && <p className="notice error" role="alert">{error}</p>}
         <button type="submit" disabled={busy}>{busy ? t('auth.working') : signup ? t('auth.signUp') : t('auth.signIn')}</button>
       </form>

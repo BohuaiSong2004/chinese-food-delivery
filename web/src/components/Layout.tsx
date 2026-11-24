@@ -49,6 +49,7 @@ export function Layout() {
         <nav aria-label={t('nav.footer')} className="footer-links">
           <Link to="/partner">{t('footer.partner')}</Link>
           <Link to="/signup?type=rider">{t('footer.ride')}</Link>
+          {user && <Link to="/password">{t('footer.password')}</Link>}
         </nav>
         <p>Wokflow — a 2026 portfolio rebuild. Payments run in a sandbox; no real money moves.</p>
       </footer>

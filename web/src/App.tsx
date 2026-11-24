@@ -14,6 +14,10 @@ const Kitchen = lazy(() => import('./pages/Kitchen').then((m) => ({ default: m.K
 const Rider = lazy(() => import('./pages/Rider').then((m) => ({ default: m.Rider })));
 const Account = lazy(() => import('./pages/Account').then((m) => ({ default: m.Account })));
 const Partner = lazy(() => import('./pages/Partner').then((m) => ({ default: m.Partner })));
+const Password = () => import('./pages/Password');
+const ForgotPassword = lazy(() => Password().then((m) => ({ default: m.ForgotPassword })));
+const ResetPassword = lazy(() => Password().then((m) => ({ default: m.ResetPassword })));
+const ChangePassword = lazy(() => Password().then((m) => ({ default: m.ChangePassword })));
 const Admin = lazy(() => import('./pages/Admin').then((m) => ({ default: m.Admin })));
 const page = (el: ReactNode) => <Suspense fallback={<Loading />}>{el}</Suspense>;
 import { useAuth } from './lib/auth';
@@ -46,6 +50,9 @@ const router = createBrowserRouter([
       { path: '/orders/:id', element: <RequireRole roles={['CUSTOMER', 'ADMIN']}>{page(<Order />)}</RequireRole> },
       { path: '/signin', element: <SignIn mode="signin" /> },
       { path: '/signup', element: <SignIn mode="signup" /> },
+      { path: '/forgot', element: page(<ForgotPassword />) },
+      { path: '/reset', element: page(<ResetPassword />) },
+      { path: '/password', element: <RequireRole roles={['CUSTOMER', 'MERCHANT', 'RIDER', 'ADMIN']}>{page(<ChangePassword />)}</RequireRole> },
       { path: '/kitchen', element: <RequireRole roles={['MERCHANT', 'ADMIN']}>{page(<Kitchen />)}</RequireRole> },
       { path: '/rider', element: <RequireRole roles={['RIDER']}>{page(<Rider />)}</RequireRole> },
       { path: '/account', element: <RequireRole roles={['CUSTOMER']}>{page(<Account />)}</RequireRole> },
