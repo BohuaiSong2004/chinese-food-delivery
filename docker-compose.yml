@@ -21,6 +21,9 @@ x-api-env: &api-env
   FORWARD_HEADERS_STRATEGY: native   # trust X-Forwarded-For from nginx on the private network
   SEED_LOADTEST_USERS: ${SEED_LOADTEST_USERS:-0}
   RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+  DB_POOL_SIZE: ${DB_POOL_SIZE:-30}                           # per replica
+  ORDER_PLACEMENT_CONCURRENCY: ${ORDER_PLACEMENT_CONCURRENCY:-12}  # placements in flight per replica (bulkhead)
+  JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:-}                  # e.g. a Flight Recorder recording while load testing
   JAVA_OPTS: -Xmx384m -XX:+ExitOnOutOfMemoryError
 
 services:
