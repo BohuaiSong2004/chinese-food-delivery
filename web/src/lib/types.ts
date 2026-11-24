@@ -58,3 +58,5 @@ export interface RestaurantProfile {
   prepMinutes: number; opensAt: string; closesAt: string; open24h: boolean; timeZone: string;
 }
 export interface RestaurantSettings { id: number; slug: string; status: RestaurantStatus; statusNote?: string; version: number; profile: RestaurantProfile }
+export interface RiderTracking { orderId: string; lat: number; lng: number; heading: 'restaurant' | 'customer'; distanceM: number; etaMinutes: number; at: string }
+export interface DispatchOffer { id: number; orderId: string; riderId: number; status: string; distanceM: number; offeredAt: string; expiresAt: string }

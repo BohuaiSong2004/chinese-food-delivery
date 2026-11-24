@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { RiderShift } from './RiderShift';
 import { useFetch } from '../lib/useFetch';
 import { useLiveRefresh } from '../lib/useLiveList';
 import { useI18n } from '../lib/i18n';
@@ -29,7 +30,9 @@ function RiderConsole() {
   const jobs = useFetch<OrderView[]>('/api/rider/jobs');
   const mine = useFetch<OrderView[]>('/api/rider/orders');
   useLiveRefresh('/api/rider/jobs/events', jobs.reload);
-  useLiveRefresh('/api/me/events', mine.reload);
+  const reloadJobs = jobs.reload;
+  const reloadMine = mine.reload;
+  const changed = useCallback(() => { reloadJobs(); reloadMine(); }, [reloadJobs, reloadMine]);
   const [error, setError] = useState<string | null>(null);
 
   const act = async (o: OrderView, action: 'claim' | 'pickup' | 'deliver') => {
@@ -48,6 +51,7 @@ function RiderConsole() {
     <section className="rider">
       <h1>{t('rider.title')}</h1>
       {error && <p className="notice error" role="alert">{error}</p>}
+      <RiderShift active={active} onChange={changed} />
       <section aria-labelledby="mine">
         <h2 id="mine">{t('rider.mine')}</h2>
         {mine.error ? <ErrorBox error={mine.error} retry={mine.reload} /> : !mine.data ? <Loading /> : active.length === 0 ? <p className="muted">{t('rider.noMine')}</p> : (

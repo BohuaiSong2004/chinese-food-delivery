@@ -7,7 +7,7 @@ import { dateTime, money, shortId, time } from '../lib/format';
 import { ErrorBox, Loading, Names, StatusBadge } from '../components/bits';
 import { Stars } from '../components/Stars';
 import { km } from '../lib/location';
-import type { OrderStatus, OrderView } from '../lib/types';
+import type { OrderStatus, OrderView, RiderTracking } from '../lib/types';
 
 const STEPS: [OrderStatus, Key][] = [
   ['PENDING_PAYMENT', 'step.placed'], ['PAID', 'step.paid'], ['ACCEPTED', 'step.accepted'],
@@ -18,7 +18,7 @@ export function Order() {
   const { id = '' } = useParams();
   const [params] = useSearchParams();
   const { t, lang } = useI18n();
-  const { order, error, live } = useLiveOrder(id);
+  const { order, error, live, rider } = useLiveOrder(id);
   const [actionError, setActionError] = useState<string | null>(null);
 
   if (error && !order) return <ErrorBox error={error} />;
@@ -60,6 +60,10 @@ export function Order() {
       {order.status === 'CANCELLED' && <p className="notice">{t('order.cancelled', { reason: order.cancelReason ?? '' })}</p>}
       {order.status === 'REJECTED' && <p className="notice">{t('order.rejected', { reason: order.cancelReason ?? '' })}</p>}
       {ended && reached.has('PAID') && <p className="muted">{t('order.refunded')}</p>}
+
+      {rider && order.riderId && (order.status === 'ACCEPTED' || order.status === 'READY' || order.status === 'PICKED_UP') && (
+        <RiderProgress rider={rider} total={order.distanceM} name={order.riderName} />
+      )}
 
       {!ended && (
         <section aria-labelledby="timeline">
@@ -146,6 +150,27 @@ function ReviewBox({ order }: { order: OrderView }) {
         {error && <p className="notice error" role="alert">{error}</p>}
         <button type="submit" disabled={rating === 0}>{t('review.submit')}</button>
       </form>
+    </section>
+  );
+}
+
+/** Where the rider is: a line from the kitchen to you, with the rider on it, and plain text for everyone. */
+function RiderProgress({ rider, total, name }: { rider: RiderTracking; total?: number; name?: string }) {
+  const { t } = useI18n();
+  const toYou = rider.heading === 'customer';
+  const fraction = toYou && total ? Math.min(1, Math.max(0, 1 - rider.distanceM / Math.max(total, rider.distanceM))) : 0;
+  const x = 20 + fraction * 260;
+  return (
+    <section aria-labelledby="rider-title" className="card rider-progress">
+      <h2 id="rider-title" className="h3">{toYou ? t('track.onTheWay', { name: name ?? '' }) : t('track.toKitchen', { name: name ?? '' })}</h2>
+      <p aria-live="polite">{t('track.distance', { km: km(rider.distanceM), min: rider.etaMinutes })}</p>
+      <svg viewBox="0 0 300 40" width="100%" height="40" aria-hidden="true" className="track">
+        <line x1="20" y1="20" x2="280" y2="20" className="track-line" />
+        <line x1="20" y1="20" x2={x} y2="20" className="track-done" />
+        <circle cx="20" cy="20" r="7" className="track-kitchen" />
+        <circle cx="280" cy="20" r="7" className="track-home" />
+        <text x={x} y="27" textAnchor="middle" fontSize="20">🛵</text>
+      </svg>
     </section>
   );
 }

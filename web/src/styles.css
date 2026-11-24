@@ -220,6 +220,16 @@ td.actions { display: table-cell; }
 td.actions > * { margin-right: .5rem; }
 .footer-links { display: flex; gap: 1.5rem; flex-wrap: wrap; padding-top: 1rem; }
 
+.shift .toolbar select { max-width: 16rem; }
+.offer { border: 2px solid var(--red); border-radius: var(--radius); padding: .75rem 1rem; margin-top: .75rem; background: #fff8f6; }
+.offer h3 { margin-top: 0; }
+.rider-progress h2 { margin-top: 0; }
+.track-line { stroke: #e2d8ca; stroke-width: 6; stroke-linecap: round; }
+.track-done { stroke: var(--green); stroke-width: 6; stroke-linecap: round; }
+.track-kitchen { fill: var(--red); }
+.track-home { fill: var(--green); }
+.load-more { margin-top: 1rem; }
+
 @media (max-width: 48rem) {
   .search-layout { grid-template-columns: 1fr; }
   .board { grid-template-columns: 1fr; }

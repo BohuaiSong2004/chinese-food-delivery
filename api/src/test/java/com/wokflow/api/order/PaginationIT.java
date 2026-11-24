@@ -51,7 +51,9 @@ class PaginationIT extends IntegrationTest {
         // the rider sees the delivery in history and nothing active
         String rider = signIn("rider@example.com");
         assertThat(http.get("/api/rider/orders/history?limit=50", rider).body().toString()).contains(placed.getFirst().toString());
-        assertThat(http.get("/api/rider/orders", rider).body().toString()).doesNotContain(placed.getFirst().toString());
+        var active = http.get("/api/rider/orders", rider);
+        assertThat(active.status()).isEqualTo(200);
+        assertThat(active.body().toString()).doesNotContain(placed.getFirst().toString());
 
         // admins page across the platform; others cannot
         String admin = signIn("admin@example.com");

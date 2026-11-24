@@ -102,11 +102,15 @@ public class LiveHub implements OutboxHandler {
     // ---------------------------------------------------------------- outbox -> redis stream
 
     @Override
-    public Set<String> topics() { return Set.of(Outbox.ORDER_STATUS); }
+    public Set<String> topics() { return Set.of(Outbox.ORDER_STATUS, Outbox.DISPATCH_OFFER); }
 
     @Override
     public void handle(String topic, String aggregateId, JsonNode payload) {
-        publish("status", keys(json.treeToValue(payload, StatusEvent.class)), payload.toString());
+        if (Outbox.DISPATCH_OFFER.equals(topic)) {
+            publish("offer", List.of("rider:" + payload.get("riderId").asLong()), payload.toString());
+        } else {
+            publish("status", keys(json.treeToValue(payload, StatusEvent.class)), payload.toString());
+        }
     }
 
     /** Appends one event (also used for ephemeral events such as rider positions). */
