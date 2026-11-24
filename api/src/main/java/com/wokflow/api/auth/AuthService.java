@@ -53,11 +53,22 @@ public class AuthService {
     public String hash(String password) { return hasher.encode(password); }
 
     public Session signUp(String email, String password, String name, String clientIp) {
+        return signUp(email, password, name, clientIp, Role.CUSTOMER);
+    }
+
+    /**
+     * Customers and restaurant owners can start straight away (a restaurant still needs its
+     * application approved before it is listed); riders wait for an admin to approve them.
+     */
+    public Session signUp(String email, String password, String name, String clientIp, Role accountType) {
+        if (accountType == Role.ADMIN) {
+            throw ApiException.badRequest("bad_account_type", "Admin accounts cannot be created by sign-up");
+        }
         // Generous enough for a campus or office NAT; still stops scripted mass sign-ups.
         limiter.check("signup", clientIp, 60, Duration.ofHours(1));
         String normalized = normalize(email);
         String hash = hasher.encode(password);
-        long id = users.insert(normalized, hash, name.strip(), Role.CUSTOMER)
+        long id = users.insert(normalized, hash, name.strip(), accountType, accountType != Role.RIDER)
                 .orElseThrow(() -> ApiException.conflict("email_taken", "An account with this email already exists"));
         UserRepository.User user = users.findById(id).orElseThrow();
         return start(user);

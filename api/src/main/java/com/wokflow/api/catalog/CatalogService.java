@@ -50,11 +50,12 @@ public class CatalogService {
 
     public List<RestaurantView> restaurants() {
         Instant now = clock.instant();
-        return repo.restaurants().stream().map(r -> RestaurantView.of(r, now)).toList();
+        return repo.liveRestaurants().stream().map(r -> RestaurantView.of(r, now)).toList();
     }
 
     public MenuView menu(String slug) {
-        long id = repo.restaurantBySlug(slug).map(Restaurant::id).orElseThrow(() -> ApiException.notFound("Restaurant"));
+        long id = repo.restaurantBySlug(slug).filter(Restaurant::live).map(Restaurant::id)
+                .orElseThrow(() -> ApiException.notFound("Restaurant"));
         return menu(id);
     }
 

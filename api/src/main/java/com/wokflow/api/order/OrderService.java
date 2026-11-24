@@ -160,6 +160,9 @@ public class OrderService {
     private Priced price(PlaceOrder req, Map<Long, Integer> qty) {
         Restaurant r = catalog.restaurant(req.restaurantId()).orElseThrow(() -> ApiException.notFound("Restaurant"));
         Instant now = clock.instant();
+        if (!r.live()) {
+            throw ApiException.notFound("Restaurant");
+        }
         if (!r.acceptingOrders()) {
             throw ApiException.conflict("restaurant_paused", r.name() + " is not taking orders right now");
         }
@@ -175,7 +178,7 @@ public class OrderService {
             if (d == null || d.restaurantId() != r.id()) {
                 throw ApiException.badRequest("unknown_dish", "Dish " + e.getKey() + " is not on this menu");
             }
-            if (!d.available()) {
+            if (!d.available() || d.archived()) {
                 throw ApiException.conflict("dish_unavailable", d.name() + " is not available right now");
             }
             subtotal += d.priceCents() * e.getValue();

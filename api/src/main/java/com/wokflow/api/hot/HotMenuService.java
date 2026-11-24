@@ -120,7 +120,7 @@ public class HotMenuService {
         List<Long> dishIds = ranked.keySet().stream().map(k -> Long.parseLong(k.substring(k.indexOf(':') + 1))).toList();
         Map<Long, TrendingDish> details = db.sql("""
                 select d.id, d.restaurant_id, r.slug, r.name as rname, d.name, d.name_zh, d.price_cents
-                from dishes d join restaurants r on r.id = d.restaurant_id where d.id = any(?) and d.available""")
+                from dishes d join restaurants r on r.id = d.restaurant_id where d.id = any(?) and d.available and d.archived_at is null and r.status = 'LIVE'""")
                 .param(dishIds.toArray(Long[]::new))
                 .query((rs, n) -> new TrendingDish(rs.getLong("restaurant_id"), rs.getString("slug"), rs.getString("rname"),
                         rs.getLong("id"), rs.getString("name"), rs.getString("name_zh"), rs.getInt("price_cents"), 0))

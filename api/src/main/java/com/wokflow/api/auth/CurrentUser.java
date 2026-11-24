@@ -9,7 +9,11 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 /** The caller, read from the verified access token only (no database lookup). */
-public record CurrentUser(long id, Role role, String name, Set<Long> restaurantIds) {
+public record CurrentUser(long id, Role role, String name, Set<Long> restaurantIds, boolean pending) {
+
+    public CurrentUser(long id, Role role, String name, Set<Long> restaurantIds) {
+        this(id, role, name, restaurantIds, false);
+    }
 
     public static CurrentUser from(Jwt jwt) {
         Object raw = jwt.getClaims().get("rid");
@@ -18,7 +22,8 @@ public record CurrentUser(long id, Role role, String name, Set<Long> restaurantI
                 Long.parseLong(jwt.getSubject()),
                 Role.valueOf(jwt.getClaimAsString("role")),
                 jwt.getClaimAsString("name"),
-                Set.copyOf(rids.stream().map(o -> o instanceof Number n ? n.longValue() : Long.parseLong(o.toString())).toList()));
+                Set.copyOf(rids.stream().map(o -> o instanceof Number n ? n.longValue() : Long.parseLong(o.toString())).toList()),
+                Boolean.TRUE.equals(jwt.getClaim("pending")));
     }
 
     public static CurrentUser require() {
@@ -39,4 +44,12 @@ public record CurrentUser(long id, Role role, String name, Set<Long> restaurantI
     }
 
     public boolean is(Role r) { return role == r; }
+
+    /** A rider whose application an admin has not approved yet. */
+    public void requireApproved() {
+        if (pending) {
+            throw new ApiException(org.springframework.http.HttpStatus.FORBIDDEN, "pending_approval",
+                    "Your account is waiting for approval");
+        }
+    }
 }
