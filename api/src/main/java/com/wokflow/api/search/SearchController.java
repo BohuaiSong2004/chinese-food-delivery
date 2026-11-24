@@ -20,7 +20,9 @@ public class SearchController {
                                 @RequestParam(required = false) List<String> cuisine,
                                 @RequestParam(required = false) Integer maxSpice,
                                 @RequestParam(defaultValue = "0") int page,
-                                @RequestParam(defaultValue = "20") int size) {
+                                @RequestParam(defaultValue = "20") int size,
+                                @RequestParam(required = false) Double lat,
+                                @RequestParam(required = false) Double lng) {
         if (q != null && q.length() > 100) {
             throw ApiException.badRequest("query_too_long", "Search text is limited to 100 characters");
         }
@@ -30,7 +32,7 @@ public class SearchController {
             throw ApiException.badRequest("bad_spice", "maxSpice must be 0 to 3");
         }
         return search.search(new SearchService.Criteria(q, tags, cuisines, maxSpice, Math.clamp(page, 0, 50),
-                Math.clamp(size, 1, 50)));
+                Math.clamp(size, 1, 50), com.wokflow.api.catalog.CatalogController.point(lat, lng)));
     }
 
     private static List<String> clean(List<String> values) {

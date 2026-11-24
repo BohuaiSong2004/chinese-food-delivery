@@ -19,7 +19,13 @@ public class OrderRepository {
     public record Order(UUID id, long customerId, long restaurantId, OrderStatus status, int subtotalCents,
                         int deliveryFeeCents, int commissionCents, int totalCents, String deliveryAddress,
                         String deliveryNotes, Long riderId, String requestHash, String cancelReason,
-                        Instant paymentDeadline, int version, Instant createdAt, Instant updatedAt) {}
+                        Instant paymentDeadline, int version, Instant createdAt, Instant updatedAt,
+                        Double deliveryLat, Double deliveryLng, Integer distanceM) {
+
+        public com.wokflow.api.geo.GeoPoint deliveryPoint() {
+            return deliveryLat == null ? null : new com.wokflow.api.geo.GeoPoint(deliveryLat, deliveryLng);
+        }
+    }
 
     /** Result of a successful compare-and-set. */
     public record Changed(int version, OrderStatus status, long customerId, long restaurantId, Long riderId,
@@ -28,7 +34,7 @@ public class OrderRepository {
     static final String COLS = """
             id, customer_id, restaurant_id, status, subtotal_cents, delivery_fee_cents, commission_cents, total_cents,
             delivery_address, delivery_notes, rider_id, request_hash, cancel_reason, payment_deadline, version,
-            created_at, updated_at""";
+            created_at, updated_at, delivery_lat, delivery_lng, distance_m""";
 
     private final JdbcClient db;
 
@@ -50,15 +56,15 @@ public class OrderRepository {
      */
     public boolean insertIfAbsent(UUID id, long customerId, long restaurantId, int subtotal, int deliveryFee,
                                   int commission, String address, String notes, String key, String requestHash,
-                                  Instant deadline) {
+                                  Instant deadline, double lat, double lng, int distanceM) {
         return db.sql("""
                 insert into orders (id, customer_id, restaurant_id, status, subtotal_cents, delivery_fee_cents,
                                     commission_cents, total_cents, delivery_address, delivery_notes,
-                                    idempotency_key, request_hash, payment_deadline)
-                values (?, ?, ?, 'PENDING_PAYMENT', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    idempotency_key, request_hash, payment_deadline, delivery_lat, delivery_lng, distance_m)
+                values (?, ?, ?, 'PENDING_PAYMENT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict (customer_id, idempotency_key) do nothing""")
                 .params(id, customerId, restaurantId, subtotal, deliveryFee, commission, subtotal + deliveryFee,
-                        address, notes, key, requestHash, Timestamp.from(deadline))
+                        address, notes, key, requestHash, Timestamp.from(deadline), lat, lng, distanceM)
                 .update() == 1;
     }
 
@@ -176,6 +182,7 @@ public class OrderRepository {
                 rs.getInt("commission_cents"), rs.getInt("total_cents"), rs.getString("delivery_address"),
                 rs.getString("delivery_notes"), (Long) rs.getObject("rider_id"), rs.getString("request_hash"),
                 rs.getString("cancel_reason"), rs.getTimestamp("payment_deadline").toInstant(), rs.getInt("version"),
-                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
+                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant(),
+                (Double) rs.getObject("delivery_lat"), (Double) rs.getObject("delivery_lng"), (Integer) rs.getObject("distance_m"));
     }
 }

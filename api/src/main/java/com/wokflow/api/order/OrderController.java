@@ -37,7 +37,7 @@ public class OrderController {
 
     public record PlaceOrderRequest(@Positive long restaurantId,
                                     @NotEmpty @Size(max = 20) List<@Valid Item> items,
-                                    @NotBlank @Size(max = 200) String deliveryAddress,
+                                    @Positive long addressId,
                                     @Size(max = 300) String deliveryNotes) {}
 
     public record ActionRequest(@Size(max = 200) String reason) {}
@@ -59,7 +59,7 @@ public class OrderController {
         }
         var placed = orders.place(CurrentUser.require(), new OrderService.PlaceOrder(req.restaurantId(),
                 req.items().stream().map(i -> new OrderService.ItemRequest(i.dishId(), i.quantity())).toList(),
-                req.deliveryAddress(), req.deliveryNotes()), key);
+                req.addressId(), req.deliveryNotes()), key);
         return ResponseEntity.status(placed.created() ? HttpStatus.CREATED : HttpStatus.OK).body(placed.order());
     }
 

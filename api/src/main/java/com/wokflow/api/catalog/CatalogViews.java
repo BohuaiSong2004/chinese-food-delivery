@@ -9,14 +9,22 @@ public final class CatalogViews {
     public record RestaurantView(long id, String slug, String name, String nameZh, String description, String cuisine,
                                  List<String> tags, String neighborhood, String address, int deliveryFeeCents,
                                  int minOrderCents, int prepMinutes, boolean openNow, Instant nextOpening,
-                                 boolean acceptingOrders, String hours, String image) {
+                                 boolean acceptingOrders, String hours, String image, Double lat, Double lng,
+                                 double deliveryRadiusKm, com.wokflow.api.geo.DeliveryQuote delivery,
+                                 double rating, int ratingCount) {
 
         static RestaurantView of(Restaurant r, Instant now, String image) {
+            return of(r, now, image, null);
+        }
+
+        static RestaurantView of(Restaurant r, Instant now, String image, com.wokflow.api.geo.DeliveryQuote delivery) {
             String hours = r.open24h() ? "24h" : r.opensAt() + "–" + r.closesAt();
             boolean open = r.isOpenAt(now);
             return new RestaurantView(r.id(), r.slug(), r.name(), r.nameZh(), r.description(), r.cuisine(), r.tags(),
                     r.neighborhood(), r.address(), r.deliveryFeeCents(), r.minOrderCents(), r.prepMinutes(), open,
-                    open ? null : r.nextOpening(now), r.acceptingOrders(), hours, image);
+                    open ? null : r.nextOpening(now), r.acceptingOrders(), hours, image, r.lat(), r.lng(),
+                    r.deliveryRadiusKm(), delivery,
+                    r.ratingCount() == 0 ? 0 : Math.round(r.ratingSum() * 10.0 / r.ratingCount()) / 10.0, r.ratingCount());
         }
     }
 

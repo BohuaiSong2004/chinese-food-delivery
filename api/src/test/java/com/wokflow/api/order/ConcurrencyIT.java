@@ -106,7 +106,7 @@ class ConcurrencyIT extends IntegrationTest {
                 Collections.reverse(items);
             }
             return http.post("/api/orders", tokens.get(i), Map.of("restaurantId", k.id(), "items", items,
-                    "deliveryAddress", "1 Race St"), Map.of("Idempotency-Key", unique("k"))).status();
+                    "addressId", addressId(tokens.get(i))), Map.of("Idempotency-Key", unique("k"))).status();
         });
 
         assertThat(statuses.subList(0, 100)).containsOnly(201);

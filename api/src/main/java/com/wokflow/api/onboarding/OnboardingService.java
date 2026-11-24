@@ -59,9 +59,11 @@ public class OnboardingService {
     private final Outbox outbox;
     private final Tx tx;
     private final Clock clock;
+    private final com.wokflow.api.geo.ServiceArea area;
 
     public OnboardingService(JdbcClient db, CatalogRepository catalog, LedgerService ledger, Outbox outbox, Tx tx,
-                             Clock clock) {
+                             Clock clock, com.wokflow.api.geo.ServiceArea area) {
+        this.area = area;
         this.db = db;
         this.catalog = catalog;
         this.ledger = ledger;
@@ -78,6 +80,7 @@ public class OnboardingService {
             throw new ApiException(HttpStatus.FORBIDDEN, "merchants_only", "Sign up as a restaurant owner to apply");
         }
         validate(p);
+        var at = area.locate(p.zip(), p.pinLat(), p.pinLng());
         return tx.run(() -> {
             // Serialize one owner's applications so the pending limit cannot be raced past.
             db.sql("select id from users where id = ? for update").param(owner.id()).query(Long.class).single();
@@ -93,13 +96,14 @@ public class OnboardingService {
                 Long id = db.sql("""
                         insert into restaurants (slug, name, name_zh, description, cuisine, tags, neighborhood, address,
                             delivery_fee_cents, min_order_cents, prep_minutes, opens_at, closes_at, open_24h, time_zone,
-                            status, submitted_at)
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
+                            status, submitted_at, zip, lat, lng, delivery_radius_km)
+                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?)
                         on conflict (slug) do nothing returning id""")
                         .params(slug, p.name().strip(), p.nameZh().strip(), description(p), p.cuisine(),
                                 Tags.check(p.tags()).toArray(String[]::new), p.neighborhood().strip(), p.address().strip(),
                                 p.deliveryFeeCents(), p.minOrderCents(), p.prepMinutes(), LocalTime.parse(p.opensAt()),
-                                LocalTime.parse(p.closesAt()), p.open24h(), zone(p), java.sql.Timestamp.from(clock.instant()))
+                                LocalTime.parse(p.closesAt()), p.open24h(), zone(p), java.sql.Timestamp.from(clock.instant()),
+                                p.zip(), at.lat(), at.lng(), p.deliveryRadiusKm())
                         .query(Long.class).optional().orElse(null);
                 if (id != null) {
                     db.sql("insert into restaurant_staff (restaurant_id, user_id) values (?, ?)").params(id, owner.id()).update();
@@ -116,17 +120,19 @@ public class OnboardingService {
     public Restaurant update(CurrentUser user, long restaurantId, RestaurantProfile p, long expectedVersion) {
         user.requireStaffOf(restaurantId);
         validate(p);
+        var at = area.locate(p.zip(), p.pinLat(), p.pinLng());
         tx.runVoid(() -> {
             int n = db.sql("""
                     update restaurants set name = ?, name_zh = ?, description = ?, cuisine = ?, tags = ?, neighborhood = ?,
                         address = ?, delivery_fee_cents = ?, min_order_cents = ?, prep_minutes = ?, opens_at = ?,
-                        closes_at = ?, open_24h = ?, time_zone = ?, version = version + 1, menu_version = menu_version + 1,
-                        updated_at = now()
+                        closes_at = ?, open_24h = ?, time_zone = ?, zip = ?, lat = ?, lng = ?, delivery_radius_km = ?,
+                        version = version + 1, menu_version = menu_version + 1, updated_at = now()
                     where id = ? and version = ?""")
                     .params(p.name().strip(), p.nameZh().strip(), description(p), p.cuisine(),
                             Tags.check(p.tags()).toArray(String[]::new), p.neighborhood().strip(), p.address().strip(),
                             p.deliveryFeeCents(), p.minOrderCents(), p.prepMinutes(), LocalTime.parse(p.opensAt()),
-                            LocalTime.parse(p.closesAt()), p.open24h(), zone(p), restaurantId, expectedVersion)
+                            LocalTime.parse(p.closesAt()), p.open24h(), zone(p), p.zip(), at.lat(), at.lng(),
+                            p.deliveryRadiusKm(), restaurantId, expectedVersion)
                     .update();
             if (n == 0) {
                 catalog.restaurant(restaurantId).orElseThrow(() -> ApiException.notFound("Restaurant"));
@@ -173,6 +179,9 @@ public class OnboardingService {
                         + d.name().toLowerCase(Locale.ROOT));
             }
             if (d.to == RestaurantStatus.LIVE) {
+                if (r.location() == null) {
+                    throw ApiException.conflict("no_location", "The restaurant has no location yet");
+                }
                 ledger.ensureMerchantAccount(restaurantId, r.name());
             }
             audit(admin, "restaurant." + d.name().toLowerCase(Locale.ROOT), "restaurant:" + restaurantId, note);

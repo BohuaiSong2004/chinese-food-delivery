@@ -7,10 +7,10 @@ public final class TestProps {
     private TestProps() {}
 
     public static AppProperties rateLimit(boolean enabled) {
-        return new AppProperties(null, null, null, null, null, new AppProperties.RateLimit(enabled), null, null, null, null);
+        return new AppProperties(null, null, null, null, null, new AppProperties.RateLimit(enabled), null, null, null, null, null);
     }
 
     public static AppProperties payments(AppProperties.Payments p) {
-        return new AppProperties(null, null, p, null, null, null, null, null, null, null);
+        return new AppProperties(null, null, p, null, null, null, null, null, null, null, null);
     }
 }

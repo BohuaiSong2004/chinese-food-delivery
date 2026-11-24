@@ -36,7 +36,7 @@ import org.springframework.stereotype.Service;
 public class OrderService {
     public record ItemRequest(long dishId, int quantity) {}
 
-    public record PlaceOrder(long restaurantId, List<ItemRequest> items, String deliveryAddress, String deliveryNotes) {}
+    public record PlaceOrder(long restaurantId, List<ItemRequest> items, long addressId, String deliveryNotes) {}
 
     private final OrderRepository orders;
     private final OrderTransitions transitions;
@@ -50,10 +50,18 @@ public class OrderService {
     private final JdbcClient db;
     private final Clock clock;
     private final AppProperties props;
+    private final com.wokflow.api.geo.AddressBook addresses;
+    private final com.wokflow.api.geo.DeliveryPricing pricing;
+    private final com.wokflow.api.images.ImageService images;
 
     public OrderService(OrderRepository orders, OrderTransitions transitions, StockReservations stock, CatalogRepository catalog,
                         PaymentService payments, Outbox outbox, RateLimiter limiter, Tx tx, JdbcClient db, Clock clock,
-                        AppProperties props, io.micrometer.core.instrument.MeterRegistry meters) {
+                        AppProperties props, io.micrometer.core.instrument.MeterRegistry meters,
+                        com.wokflow.api.geo.AddressBook addresses, com.wokflow.api.geo.DeliveryPricing pricing,
+                        com.wokflow.api.images.ImageService images) {
+        this.addresses = addresses;
+        this.pricing = pricing;
+        this.images = images;
         this.placements = new com.wokflow.api.common.Bulkhead("order-placement", props.orders().placementConcurrency(),
                 props.orders().placementWait(), meters);
         this.orders = orders;
@@ -101,7 +109,7 @@ public class OrderService {
         if (qty.values().stream().anyMatch(q -> q > 50)) {
             throw ApiException.badRequest("too_many", "At most 50 of one dish per order");
         }
-        String hash = requestHash(req.restaurantId(), qty, req.deliveryAddress(), req.deliveryNotes());
+        String hash = requestHash(req.restaurantId(), qty, req.addressId(), req.deliveryNotes());
 
         Outcome outcome = placements.run(() -> {
             for (int attempt = 0; attempt < 3; attempt++) {
@@ -109,7 +117,7 @@ public class OrderService {
                 if (existing.isPresent()) {
                     return replay(existing.get(), hash);
                 }
-                Priced priced = price(req, qty);
+                Priced priced = price(user, req, qty);
                 UUID id = UUID.randomUUID();
                 Map<Long, Integer> limited = new TreeMap<>();
                 qty.forEach((dish, n) -> {
@@ -154,11 +162,14 @@ public class OrderService {
         return new Placed(view(orders.find(outcome.id()).orElseThrow()), outcome.created());
     }
 
-    private record Priced(Restaurant restaurant, Map<Long, Dish> dishes, List<Line> lines, int subtotal, int commission, Instant now) {}
+    private record Priced(Restaurant restaurant, Map<Long, Dish> dishes, List<Line> lines, int subtotal, int commission, Instant now,
+                          com.wokflow.api.geo.AddressBook.Address address, com.wokflow.api.geo.DeliveryQuote quote) {}
 
-    /** Validates against the database (prices come from here, never from the client). Read-only. */
-    private Priced price(PlaceOrder req, Map<Long, Integer> qty) {
+    /** Validates against the database (prices and the delivery fee come from here, never from the client). Read-only. */
+    private Priced price(CurrentUser user, PlaceOrder req, Map<Long, Integer> qty) {
         Restaurant r = catalog.restaurant(req.restaurantId()).orElseThrow(() -> ApiException.notFound("Restaurant"));
+        var address = addresses.find(user.id(), req.addressId())
+                .orElseThrow(() -> ApiException.badRequest("unknown_address", "Choose one of your saved addresses"));
         Instant now = clock.instant();
         if (!r.live()) {
             throw ApiException.notFound("Restaurant");
@@ -187,15 +198,22 @@ public class OrderService {
         if (subtotal < r.minOrderCents()) {
             throw ApiException.badRequest("below_minimum", "Minimum order is " + r.minOrderCents() + " cents");
         }
-        return new Priced(r, dishes, lines, subtotal, (int) Math.round(subtotal * r.commissionBps() / 10_000.0), now);
+        var quote = pricing.quote(r, address.point()).orElseThrow(() -> ApiException.notFound("Restaurant"));
+        if (!quote.deliverable()) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_CONTENT, "out_of_range", String.format(
+                    "%s delivers within %.0f km; this address is %.1f km away", r.name(), r.deliveryRadiusKm(), quote.distanceM() / 1000.0));
+        }
+        return new Priced(r, dishes, lines, subtotal, (int) Math.round(subtotal * r.commissionBps() / 10_000.0), now,
+                address, quote);
     }
 
     /** The order transaction. Touches no dish rows, so it never waits on a popular dish. */
     private Outcome create(CurrentUser user, PlaceOrder req, String key, String hash, UUID id, Priced p) {
         Restaurant r = p.restaurant();
-        if (!orders.insertIfAbsent(id, user.id(), r.id(), p.subtotal(), r.deliveryFeeCents(), p.commission(),
-                req.deliveryAddress().strip(), req.deliveryNotes() == null ? "" : req.deliveryNotes().strip(),
-                key, hash, p.now().plus(props.payments().paymentWindow()))) {
+        int fee = p.quote().feeCents();
+        if (!orders.insertIfAbsent(id, user.id(), r.id(), p.subtotal(), fee, p.commission(),
+                p.address().oneLine(), notes(req, p.address()), key, hash, p.now().plus(props.payments().paymentWindow()),
+                p.address().lat(), p.address().lng(), p.quote().distanceM())) {
             // A concurrent request with the same key won; its row is committed by now. Our holds are released by the caller.
             Outcome replayed = replay(orders.findByKey(user.id(), key).orElseThrow(), hash);
             throw new Replayed(replayed);
@@ -203,7 +221,7 @@ public class OrderService {
         orders.insertItems(id, p.lines());
         orders.insertHistory(id, 1, OrderStatus.PENDING_PAYMENT, user.id(), null);
         db.sql("insert into payments (id, order_id, status, amount_cents) values (?, ?, 'CREATING', ?)")
-                .params(UUID.randomUUID(), id, p.subtotal() + r.deliveryFeeCents()).update();
+                .params(UUID.randomUUID(), id, p.subtotal() + fee).update();
         outbox.publish(Outbox.ORDER_STATUS, id.toString(), new StatusEvent(id, r.id(), user.id(), null,
                 OrderStatus.PENDING_PAYMENT, null, 1, p.now(), null));
         stock.confirm(id);
@@ -238,8 +256,16 @@ public class OrderService {
         return orders.findByKey(customerId, key);
     }
 
-    private static String requestHash(long restaurantId, Map<Long, Integer> qty, String address, String notes) {
-        String canonical = restaurantId + "|" + qty + "|" + address.strip() + "|" + (notes == null ? "" : notes.strip());
+    /** Notes for this order, then the address's standing notes ("gate code 1234"). */
+    private static String notes(PlaceOrder req, com.wokflow.api.geo.AddressBook.Address a) {
+        String own = req.deliveryNotes() == null ? "" : req.deliveryNotes().strip();
+        String standing = a.notes() == null ? "" : a.notes().strip();
+        String both = own.isEmpty() ? standing : standing.isEmpty() ? own : own + " · " + standing;
+        return both.length() > 500 ? both.substring(0, 500) : both;
+    }
+
+    private static String requestHash(long restaurantId, Map<Long, Integer> qty, long addressId, String notes) {
+        String canonical = restaurantId + "|" + qty + "|" + addressId + "|" + (notes == null ? "" : notes.strip());
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(canonical.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {
@@ -317,10 +343,15 @@ public class OrderService {
         String checkout = o.status() == OrderStatus.PENDING_PAYMENT
                 ? db.sql("select checkout_url from payments where order_id = ?").param(o.id()).query(String.class).optional().orElse(null)
                 : null;
+        var review = o.status() == OrderStatus.DELIVERED
+                ? db.sql("select rating, comment, reply from reviews where order_id = ?").param(o.id())
+                        .query((rs, n) -> new OrderViews.ReviewRef(rs.getInt(1), rs.getString(2), rs.getString(3))).optional().orElse(null)
+                : null;
         return new OrderView(o.id(), o.status(), o.version(),
-                new RestaurantRef(r.id(), r.slug(), r.name(), r.nameZh(), r.address()), orders.items(o.id()),
-                o.subtotalCents(), o.deliveryFeeCents(), o.totalCents(), o.deliveryAddress(), o.deliveryNotes(),
+                new RestaurantRef(r.id(), r.slug(), r.name(), r.nameZh(), r.address(), r.lat(), r.lng(), images.url(r.coverKey())),
+                orders.items(o.id()), o.subtotalCents(), o.deliveryFeeCents(), o.totalCents(), o.deliveryAddress(), o.deliveryNotes(),
                 o.riderId(), orders.customerName(o.customerId()), o.cancelReason(), o.paymentDeadline(), o.createdAt(),
-                o.updatedAt(), checkout, orders.history(o.id()));
+                o.updatedAt(), checkout, orders.history(o.id()), o.distanceM(), o.deliveryLat(), o.deliveryLng(),
+                o.riderId() == null ? null : orders.customerName(o.riderId()), review);
     }
 }

@@ -29,4 +29,8 @@ public record DishDocument(
         @JsonProperty("version") long version,
         /** Restaurant LIVE and dish not archived: only listed documents are ever returned. */
         @JsonProperty("listed") boolean listed,
-        @JsonProperty("image") String image) {}
+        @JsonProperty("image") String image,
+        @JsonProperty("location") java.util.Map<String, Double> location,
+        @JsonProperty("delivery_area") java.util.Map<String, Object> deliveryArea,
+        /** Restaurant rating shrunk towards 4.2 by five virtual reviews (ranking signal). */
+        @JsonProperty("rating") double rating) {}

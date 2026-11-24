@@ -14,7 +14,8 @@ public record AppProperties(
         Seed seed,
         Outbox outbox,
         Orders orders,
-        Images images) {
+        Images images,
+        Delivery delivery) {
 
     public record Jwt(String issuer, String privateKey, String privateKeyFile, boolean generateIfMissing, Duration accessTtl,
                       Duration refreshTtl, boolean refreshCookieSecure) {}
@@ -34,6 +35,9 @@ public record AppProperties(
 
     /** Placement transactions allowed at once per replica, and how long a request may queue for one. */
     public record Orders(int placementConcurrency, Duration placementWait) {}
+
+    /** Platform delivery pricing on top of each restaurant's base fee. */
+    public record Delivery(int feePerKmCents, double freeKm) {}
 
     /** store = local (a directory, e.g. a compose volume) or s3; publicBase is what image URLs start with. */
     public record Images(String store, String dir, String bucket, String prefix, String region, String endpoint,

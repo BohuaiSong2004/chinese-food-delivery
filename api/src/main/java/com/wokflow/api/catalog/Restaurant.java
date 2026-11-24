@@ -10,7 +10,13 @@ public record Restaurant(
         long id, String slug, String name, String nameZh, String description, String cuisine, List<String> tags,
         String neighborhood, String address, int deliveryFeeCents, int minOrderCents, int prepMinutes,
         int commissionBps, LocalTime opensAt, LocalTime closesAt, boolean open24h, String timeZone,
-        boolean acceptingOrders, long version, RestaurantStatus status, String imageKey, String coverKey) {
+        boolean acceptingOrders, long version, RestaurantStatus status, String imageKey, String coverKey,
+        String zip, Double lat, Double lng, double deliveryRadiusKm, long ratingSum, int ratingCount) {
+
+    /** Null until the restaurant's location is known (it cannot go live without one). */
+    public com.wokflow.api.geo.GeoPoint location() {
+        return lat == null || lng == null ? null : new com.wokflow.api.geo.GeoPoint(lat, lng);
+    }
 
     /** Listed on the storefront, searchable and able to take new orders. */
     public boolean live() { return status == RestaurantStatus.LIVE; }

@@ -31,13 +31,16 @@ public class CatalogService {
     private final ObjectMapper json;
     private final HotMenuService hot;
     private final com.wokflow.api.images.ImageService images;
+    private final com.wokflow.api.geo.DeliveryPricing pricing;
     private final Clock clock;
     private final Counter hits;
     private final Counter misses;
 
     public CatalogService(CatalogRepository repo, StringRedisTemplate redis, ObjectMapper json, HotMenuService hot,
-                          Clock clock, MeterRegistry meters, com.wokflow.api.images.ImageService images) {
+                          Clock clock, MeterRegistry meters, com.wokflow.api.images.ImageService images,
+                          com.wokflow.api.geo.DeliveryPricing pricing) {
         this.images = images;
+        this.pricing = pricing;
         this.repo = repo;
         this.redis = redis;
         this.json = json;
@@ -50,15 +53,37 @@ public class CatalogService {
     /** Versioned key: a menu change bumps menu_version, so an old cached copy is simply never read again. */
     static String menuKey(long restaurantId, long menuVersion) { return "menu:v2:" + restaurantId + ":" + menuVersion; }
 
-    public List<RestaurantView> restaurants() {
+    public List<RestaurantView> restaurants() { return restaurants(null); }
+
+    /**
+     * The storefront. With a delivery point, each restaurant carries its fee, distance and ETA, and
+     * the list puts restaurants that deliver there first, nearest first.
+     */
+    public List<RestaurantView> restaurants(com.wokflow.api.geo.GeoPoint to) {
         Instant now = clock.instant();
-        return repo.liveRestaurants().stream().map(r -> RestaurantView.of(r, now, images.url(r.coverKey()))).toList();
+        var views = repo.liveRestaurants().stream()
+                .map(r -> RestaurantView.of(r, now, images.url(r.coverKey()), to == null ? null : pricing.quote(r, to).orElse(null)))
+                .toList();
+        if (to == null) {
+            return views;
+        }
+        return views.stream().sorted(java.util.Comparator
+                .comparing((RestaurantView v) -> v.delivery() == null || !v.delivery().deliverable())
+                .thenComparingInt(v -> v.delivery() == null ? Integer.MAX_VALUE : v.delivery().distanceM())).toList();
     }
 
-    public MenuView menu(String slug) {
+    public MenuView menu(String slug) { return menu(slug, null); }
+
+    public MenuView menu(String slug, com.wokflow.api.geo.GeoPoint to) {
         long id = repo.restaurantBySlug(slug).filter(Restaurant::live).map(Restaurant::id)
                 .orElseThrow(() -> ApiException.notFound("Restaurant"));
-        return menu(id);
+        MenuView m = menu(id);
+        if (to == null) {
+            return m;
+        }
+        Restaurant r = repo.restaurant(id).orElseThrow();
+        var rv = RestaurantView.of(r, clock.instant(), m.restaurant().image(), pricing.quote(r, to).orElse(null));
+        return new MenuView(rv, m.categories(), m.popular());
     }
 
     /** Menu structure comes from Redis (falls back to Postgres); stock and popularity are always live. */

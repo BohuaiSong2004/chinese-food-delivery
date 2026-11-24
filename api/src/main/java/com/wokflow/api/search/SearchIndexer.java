@@ -55,7 +55,8 @@ public class SearchIndexer implements OutboxHandler {
             select d.id, d.restaurant_id, r.slug, r.name as rname, r.name_zh as rname_zh, r.cuisine, r.neighborhood,
                    d.name, d.name_zh, d.description, d.tags, d.spice_level, d.price_cents, d.available,
                    r.accepting_orders, d.version + r.version as doc_version, coalesce(p.qty, 0) as popularity,
-                   (r.status = 'LIVE' and d.archived_at is null) as listed, d.image_key
+                   (r.status = 'LIVE' and d.archived_at is null) as listed, d.image_key, r.lat, r.lng, r.delivery_radius_km,
+                   r.rating_sum, r.rating_count
             from dishes d
             join restaurants r on r.id = d.restaurant_id
             left join (
@@ -270,7 +271,27 @@ public class SearchIndexer implements OutboxHandler {
                 rs.getString("description"),
                 List.of((String[]) rs.getArray("tags").getArray()), rs.getInt("spice_level"), rs.getInt("price_cents"),
                 rs.getBoolean("available"), rs.getBoolean("accepting_orders"), rs.getDouble("popularity"),
-                rs.getLong("doc_version"), rs.getBoolean("listed"), rs.getString("image_key"));
+                rs.getLong("doc_version"), rs.getBoolean("listed"), rs.getString("image_key"),
+                location(rs), deliveryArea(rs),
+                com.wokflow.api.review.ReviewService.Rating.bayesian(rs.getLong("rating_sum"), rs.getInt("rating_count")));
+    }
+
+    static java.util.Map<String, Double> location(ResultSet rs) throws java.sql.SQLException {
+        Double lat = (Double) rs.getObject("lat");
+        Double lng = (Double) rs.getObject("lng");
+        return lat == null || lng == null ? null : java.util.Map.of("lat", lat, "lon", lng);
+    }
+
+    /** The delivery radius as a 32-sided polygon, so "who delivers here?" is one geo_shape intersects query. */
+    static java.util.Map<String, Object> deliveryArea(ResultSet rs) throws java.sql.SQLException {
+        Double lat = (Double) rs.getObject("lat");
+        Double lng = (Double) rs.getObject("lng");
+        if (lat == null || lng == null) {
+            return null;
+        }
+        double[][] ring = new com.wokflow.api.geo.GeoPoint(lat, lng).circle(rs.getDouble("delivery_radius_km") * 1000, 32);
+        // singletonList, not List.of: List.of(double[][]) would spread the rows as varargs and lose a level
+        return java.util.Map.of("type", "polygon", "coordinates", java.util.Collections.singletonList(ring));
     }
 
     /** "Biang Biang Noodles" -> "biangbiangnoodles", so a run-together English query still finds it. */

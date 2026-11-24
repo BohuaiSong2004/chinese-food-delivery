@@ -53,7 +53,8 @@ class SearchIT extends IntegrationTest {
         assertThat(names("dumplng")).isNotEmpty();                             // typo, plural stem
         assertThat(names("牛肉面")).contains("红烧牛肉面", "兰州牛肉拉面");
         assertThat(names("面")).hasSize(5);                                     // single character
-        assertThat(names("xlb")).contains("鲜肉小笼包");                         // initials of part of the name
+        // initials of part of the name (other tests' kitchens each sell a plain 小笼包, an exact "xlb", so look further down)
+        assertThat(names(http.get("/api/search?size=50&q=xlb", null).body())).contains("鲜肉小笼包");
         assertThat(names("biangbiang").getFirst()).isEqualTo("油泼扯面");        // run-together English
     }
 
