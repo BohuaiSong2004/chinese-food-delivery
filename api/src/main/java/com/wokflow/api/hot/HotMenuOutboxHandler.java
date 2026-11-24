@@ -20,6 +20,9 @@ class HotMenuOutboxHandler implements OutboxHandler {
     public Set<String> topics() { return Set.of(Outbox.ORDER_PAID); }
 
     @Override
+    public boolean usesRedis() { return true; }
+
+    @Override
     public void handle(String topic, String aggregateId, JsonNode p) {
         Map<Long, Integer> qty = new LinkedHashMap<>();
         for (JsonNode item : p.get("items")) {

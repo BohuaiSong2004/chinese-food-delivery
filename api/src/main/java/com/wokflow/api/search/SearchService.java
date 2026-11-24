@@ -61,17 +61,49 @@ public class SearchService {
         this.fallbacks = meters.counter("wokflow.search.fallback");
     }
 
+    /**
+     * Elasticsearch first, Postgres when it is not ready, fails, or takes longer than ES_BUDGET.
+     * The client's own socket timeout (10 s) suits bulk indexing, not a search box, so the query
+     * runs on a virtual thread and is abandoned after the budget. A failure opens a short breaker so
+     * a hung cluster costs one slow request per window, not one per search; the breaker closes
+     * early if the abandoned query completes after all.
+     */
     public Result search(Criteria c) {
-        if (indexer.isReady()) {
+        if (indexer.isReady() && System.nanoTime() - esSkipUntil >= 0) {
+            var call = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                try {
+                    return elasticsearch(c);
+                } catch (Exception e) {
+                    throw new java.util.concurrent.CompletionException(e);
+                }
+            }, VIRTUAL);
             try {
-                return elasticsearch(c);
+                return call.get(ES_BUDGET.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             } catch (Exception e) {
-                log.warn("Elasticsearch query failed, falling back to Postgres: {}", e.toString());
+                Throwable cause = e instanceof java.util.concurrent.ExecutionException ? e.getCause() : e;
+                if (cause instanceof java.util.concurrent.TimeoutException || cause instanceof java.io.IOException) {
+                    // unreachable or hanging: route around it for a while. The abandoned query keeps running;
+                    // if it does come back, the cluster is slow but alive (cold caches), so stop routing around it.
+                    esSkipUntil = System.nanoTime() + ES_BREAKER.toNanos();
+                    call.thenRun(() -> esSkipUntil = System.nanoTime());
+                    log.warn("Elasticsearch unreachable or slower than {} ms, using Postgres for up to {} s: {}",
+                            ES_BUDGET.toMillis(), ES_BREAKER.toSeconds(), cause.toString());
+                } else {
+                    // it answered with an error (e.g. the index is being rebuilt): fall back for this request only
+                    log.warn("Elasticsearch query failed, using Postgres for this request: {}", cause.toString());
+                }
             }
         }
         fallbacks.increment();
         return postgres(c);
     }
+
+    static final java.time.Duration ES_BUDGET = java.time.Duration.ofMillis(1500);
+    static final java.time.Duration ES_BREAKER = java.time.Duration.ofSeconds(10);
+    private static final java.util.concurrent.Executor VIRTUAL = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+    private volatile long esSkipUntil = System.nanoTime();
 
     Result elasticsearch(Criteria c) throws Exception {
         Query text = textQuery(c.q());

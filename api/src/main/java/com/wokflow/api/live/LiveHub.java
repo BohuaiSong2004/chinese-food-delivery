@@ -105,6 +105,9 @@ public class LiveHub implements OutboxHandler {
     public Set<String> topics() { return Set.of(Outbox.ORDER_STATUS, Outbox.DISPATCH_OFFER); }
 
     @Override
+    public boolean usesRedis() { return true; }
+
+    @Override
     public void handle(String topic, String aggregateId, JsonNode payload) {
         if (Outbox.DISPATCH_OFFER.equals(topic)) {
             publish("offer", List.of("rider:" + payload.get("riderId").asLong()), payload.toString());
@@ -147,6 +150,33 @@ public class LiveHub implements OutboxHandler {
 
     private static SseEmitter.SseEventBuilder event(String id, Map<String, String> f) {
         return SseEmitter.event().id(id).name(f.get("type")).data(f.get("data"));
+    }
+
+    /**
+     * Ends every open stream as soon as shutdown begins. Without this, Tomcat's graceful shutdown
+     * waited its full 30 s for streams that never finish on their own, and then cut them anyway.
+     * Browsers reconnect after the 2 s retry hint, land on another replica and resume from their
+     * Last-Event-ID, so a rolling deploy costs customers a two-second pause, not a lost update.
+     */
+    @org.springframework.context.event.EventListener(org.springframework.context.event.ContextClosedEvent.class)
+    public void closeAll() {
+        int n = 0;
+        for (Set<SseEmitter> set : streams.values()) {
+            for (SseEmitter e : set) {
+                if (set.remove(e)) {
+                    open.decrementAndGet();
+                    n++;
+                }
+                try {
+                    e.complete();
+                } catch (RuntimeException ignored) {
+                    // already finished
+                }
+            }
+        }
+        if (n > 0) {
+            log.info("Shutting down: closed {} live streams so their clients reconnect elsewhere", n);
+        }
     }
 
     /**

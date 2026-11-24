@@ -42,11 +42,15 @@ public class ErrorHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.badRequest().body(pd);
     }
 
-    /** Connection pool exhausted: tell the client to retry rather than reporting a server bug. */
+    /**
+     * Pool exhausted, or the database stopped answering (socket timeout): tell the client to retry
+     * rather than reporting a server bug.
+     */
     @ExceptionHandler({org.springframework.transaction.CannotCreateTransactionException.class,
-            org.springframework.jdbc.CannotGetJdbcConnectionException.class})
+            org.springframework.jdbc.CannotGetJdbcConnectionException.class,
+            org.springframework.dao.DataAccessResourceFailureException.class})
     ResponseEntity<ProblemDetail> overloaded(Exception e) {
-        log.warn("Database pool exhausted: {}", e.toString());
+        log.warn("Database unavailable: {}", e.toString());
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Busy right now, please retry");
         pd.setProperty("code", "busy");
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header(HttpHeaders.RETRY_AFTER, "1").body(pd);

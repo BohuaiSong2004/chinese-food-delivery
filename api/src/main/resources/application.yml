@@ -11,6 +11,13 @@ spring:
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:30}
       connection-timeout: 5000
+      validation-timeout: 2000
+      data-source-properties:
+        # A hung database must fail requests, not hold them forever: no query here needs 10 s.
+        # (Flyway shares this pool; split it out before adding a long-running migration.)
+        socketTimeout: 10
+        connectTimeout: 3
+        tcpKeepAlive: true
   flyway:
     locations: classpath:db/migration
   data:
@@ -46,6 +53,9 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        readiness:
+          include: readinessState,db   # take a replica out of the load balancer when its database is gone
   health:
     elasticsearch:
       enabled: false   # search degrades to Postgres when ES is down; do not fail readiness

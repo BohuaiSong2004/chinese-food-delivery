@@ -76,6 +76,9 @@ public class Dispatcher implements OutboxHandler {
     public Set<String> topics() { return Set.of(Outbox.ORDER_STATUS); }
 
     @Override
+    public boolean usesRedis() { return true; }
+
+    @Override
     public void handle(String topic, String aggregateId, JsonNode payload) {
         String status = payload.path("status").asText();
         boolean unassigned = payload.path("riderId").isNull() || payload.path("riderId").isMissingNode();
