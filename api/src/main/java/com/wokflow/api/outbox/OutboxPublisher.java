@@ -173,6 +173,8 @@ public class OutboxPublisher implements SmartLifecycle {
             Map<String, Long> cutoffs = outsideCutoffs(rows);
             int processed = 0;
             List<Long> done = new ArrayList<>();
+            Map<OutboxHandler, List<Row>> batched = new java.util.LinkedHashMap<>();
+            Map<OutboxHandler, List<OutboxHandler.Event>> batchedEvents = new java.util.LinkedHashMap<>();
             // A topic whose handler just failed (its store is down or hanging) is not tried again in this
             // batch: without this, one frozen dependency made every queued event wait out its own timeout,
             // and events for healthy stores waited behind them.
@@ -196,10 +198,20 @@ public class OutboxPublisher implements SmartLifecycle {
                 }
                 try {
                     JsonNode payload = json.readTree(r.payload());
-                    for (OutboxHandler h : handlers.getOrDefault(r.topic(), List.of())) {
+                    for (OutboxHandler h : hs) {
+                        if (h.batches()) {
+                            continue;
+                        }
                         long t0 = System.nanoTime();
                         h.handle(r.topic(), r.aggregateId(), payload);
                         handleTimer(h).record(System.nanoTime() - t0, java.util.concurrent.TimeUnit.NANOSECONDS);
+                    }
+                    for (OutboxHandler h : hs) {
+                        if (h.batches()) {
+                            batched.computeIfAbsent(h, k -> new ArrayList<>()).add(r);
+                            batchedEvents.computeIfAbsent(h, k -> new ArrayList<>())
+                                    .add(new OutboxHandler.Event(r.topic(), r.aggregateId(), payload));
+                        }
                     }
                     done.add(r.id());
                 } catch (Exception e) {
@@ -210,6 +222,27 @@ public class OutboxPublisher implements SmartLifecycle {
                         redisBreaker.trip("outbox " + r.topic(), e);
                     }
                     defer(r, e.toString());
+                }
+            }
+            // Batching handlers (the live stream) send everything collected above in one go, in id order.
+            // If that fails, those rows are not published: they are deferred and retried, like a failure above.
+            for (var entry : batchedEvents.entrySet()) {
+                OutboxHandler h = entry.getKey();
+                long t0 = System.nanoTime();
+                try {
+                    h.handleBatch(entry.getValue());
+                    handleTimer(h).record(System.nanoTime() - t0, java.util.concurrent.TimeUnit.NANOSECONDS);
+                } catch (Exception e) {
+                    failures.increment();
+                    log.warn("Outbox batch of {} events for {} failed: {}", entry.getValue().size(), h.getClass().getSimpleName(), e.toString());
+                    if (h.usesRedis() && com.wokflow.api.common.RedisBreaker.isOutage(e)) {
+                        redisBreaker.trip("outbox batch", e);
+                    }
+                    for (Row r : batched.get(h)) {
+                        if (done.remove(r.id())) {
+                            defer(r, e.toString());
+                        }
+                    }
                 }
             }
             if (!done.isEmpty()) {

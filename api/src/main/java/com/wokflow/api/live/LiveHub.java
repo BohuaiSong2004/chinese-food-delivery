@@ -116,6 +116,39 @@ public class LiveHub implements OutboxHandler {
         }
     }
 
+    @Override
+    public boolean batches() { return true; }
+
+    /** All of a batch's events in one pipelined round trip, in order (one XADD each). */
+    @Override
+    public void handleBatch(List<com.wokflow.api.outbox.OutboxHandler.Event> events) {
+        List<MapRecord<String, String, String>> records = new ArrayList<>(events.size());
+        for (var e : events) {
+            Map<String, String> fields = new LinkedHashMap<>();
+            if (Outbox.DISPATCH_OFFER.equals(e.topic())) {
+                fields.put("type", "offer");
+                fields.put("keys", "rider:" + e.payload().get("riderId").asLong());
+            } else {
+                fields.put("type", "status");
+                fields.put("keys", String.join(",", keys(json.treeToValue(e.payload(), StatusEvent.class))));
+            }
+            fields.put("data", e.payload().toString());
+            records.add(StreamRecords.string(fields).withStreamKey(STREAM));
+        }
+        var options = org.springframework.data.redis.connection.RedisStreamCommands.XAddOptions.maxlen(MAX_LEN).approximateTrimming(true);
+        redis.executePipelined(new org.springframework.data.redis.core.SessionCallback<Object>() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public <K, V> Object execute(org.springframework.data.redis.core.RedisOperations<K, V> ops) {
+                var stream = ((org.springframework.data.redis.core.RedisOperations<String, String>) ops).opsForStream();
+                for (var r : records) {
+                    stream.add(r, options);
+                }
+                return null;
+            }
+        });
+    }
+
     /** Appends one event (also used for ephemeral events such as rider positions). */
     public RecordId publish(String type, List<String> keys, String data) {
         Map<String, String> fields = new LinkedHashMap<>();
