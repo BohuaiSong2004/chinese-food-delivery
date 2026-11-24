@@ -24,6 +24,8 @@ test('a forgotten password is reset from the emailed link, which works once', as
 
   await page.goto('/signin');
   await page.getByRole('link', { name: 'Forgot your password?' }).click();
+  // the sign-in form stays on screen while the next page's chunk loads; do not type into it
+  await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
   await page.getByLabel('Email').fill(email);
   await page.getByRole('button', { name: 'Send reset link' }).click();
   await expect(page.getByRole('status')).toContainText('reset link is on its way');
@@ -35,6 +37,7 @@ test('a forgotten password is reset from the emailed link, which works once', as
   await page.getByLabel('Type it again').fill('fresh-password-456');
   await page.getByRole('button', { name: 'Save password' }).click();
   await expect(page.getByRole('status')).toContainText('Password changed');
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password', { exact: true }).fill('fresh-password-456');
@@ -51,6 +54,7 @@ test('a forgotten password is reset from the emailed link, which works once', as
 test('a signed-in customer changes their password and stays signed in', async ({ page }) => {
   await newCustomer(page);
   await page.getByRole('link', { name: 'Change password' }).click();
+  await expect(page.getByRole('heading', { name: 'Change password' })).toBeVisible();
   await page.getByLabel('Current password').fill('not-my-password');
   await page.getByLabel('New password').fill('changed-password-1');
   await page.getByRole('button', { name: 'Save password' }).click();
