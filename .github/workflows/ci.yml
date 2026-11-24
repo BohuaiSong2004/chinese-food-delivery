@@ -29,6 +29,7 @@ jobs:
           docker pull -q postgres:18.7-alpine &
           docker pull -q redis:8.8.4-alpine &
           docker pull -q elasticsearch:9.5.5 &
+          docker pull -q adobe/s3mock:5.2.0 &
           wait
       - name: mvn verify
         run: mvn -B -ntp verify

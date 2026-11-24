@@ -55,10 +55,12 @@ const menu = await (await fetch(`${BASE}/api/restaurants/midnight-congee`)).json
 const dish = menu.categories.flatMap((c) => c.dishes).find((d) => !d.limited && d.available);
 const customers = [];
 for (let i = 1; i <= N; i++) customers.push(await signIn(`loadtest+${1000 + i}@example.com`));
+const addressIds = await Promise.all(customers.map(async (t) =>
+  (await (await fetch(`${BASE}/api/me/addresses`, { headers: { Authorization: `Bearer ${t}` } })).json())[0].id));
 
 const orders = await Promise.all(customers.map(async (t, i) => {
   for (let attempt = 0; ; attempt++) {
-    const r = await post(`${BASE}/api/orders`, t, { restaurantId: menu.restaurant.id, items: [{ dishId: dish.id, quantity: 1 }], deliveryAddress: `${i} Watch St` }, { 'Idempotency-Key': `live-${Date.now()}-${i}` });
+    const r = await post(`${BASE}/api/orders`, t, { restaurantId: menu.restaurant.id, items: [{ dishId: dish.id, quantity: 1 }], addressId: addressIds[i] }, { 'Idempotency-Key': `live-${Date.now()}-${i}` });
     if (r.status === 201) return { token: t, order: await r.json() };
     if (r.status !== 503 || attempt > 5) throw new Error(`place ${r.status} ${await r.text()}`);
     await new Promise((res) => setTimeout(res, 1000));
