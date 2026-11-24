@@ -49,6 +49,14 @@ management:
   health:
     elasticsearch:
       enabled: false   # search degrades to Postgres when ES is down; do not fail readiness
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true   # buckets, so Prometheus can compute p95 across both replicas
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s
+    tags:
+      application: wokflow-api
 
 springdoc:
   api-docs:
