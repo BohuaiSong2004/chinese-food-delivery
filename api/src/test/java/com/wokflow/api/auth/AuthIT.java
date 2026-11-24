@@ -112,6 +112,14 @@ class AuthIT extends IntegrationTest {
         var cross = http.raw("POST", "/api/auth/refresh", null, Map.of("Cookie", "wf_refresh=" + cookie, "Origin", "https://evil.example"));
         assertThat(cross.code()).isEqualTo("bad_origin");
 
+        // the site opened at another address than the configured one (127.0.0.1, a LAN IP): its own host is same-origin
+        var ownHost = http.raw("POST", "/api/auth/refresh", null, Map.of("Cookie", "wf_refresh=" + cookie, "Origin", http.base()));
+        assertThat(ownHost.status()).isEqualTo(200);
+        cookie = refreshCookie(ownHost);
+        assertThat(AuthController.isRequestHost("http://evil.example:8000", "localhost:8000")).isFalse();
+        assertThat(AuthController.isRequestHost("http://192.168.1.20:8000", "192.168.1.20:8000")).isTrue();
+        assertThat(AuthController.isRequestHost("not a url", "localhost")).isFalse();
+
         var out = http.raw("POST", "/api/auth/signout", null, Map.of("Cookie", "wf_refresh=" + cookie, "Origin", "http://localhost:5173"));
         assertThat(out.status()).isEqualTo(204);
         assertThat(refresh(cookie).status()).isEqualTo(401);

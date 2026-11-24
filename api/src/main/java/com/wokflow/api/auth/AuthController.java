@@ -139,13 +139,31 @@ public class AuthController {
                 .secure(props.jwt().refreshCookieSecure()).sameSite("Strict").path("/api/auth").maxAge(0).build().toString());
     }
 
+    /**
+     * The refresh cookie only moves between this site and itself. Same origin means the configured
+     * public origin, or the origin the request was sent to (its Host header): opening the site as
+     * http://127.0.0.1:8000 or from a phone on the LAN used to sign in fine and then lose the session
+     * on every reload, because only "http://localhost:8000" was accepted.
+     */
     private void requireSameOrigin(HttpServletRequest http) {
         String origin = http.getHeader(HttpHeaders.ORIGIN);
-        if (origin != null && !origin.equals(props.publicOrigin())) {
+        if (origin != null && !origin.equals(props.publicOrigin()) && !isRequestHost(origin, http.getHeader(HttpHeaders.HOST))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "bad_origin", "Cross-origin request refused");
         }
         if (origin == null && "cross-site".equals(http.getHeader("Sec-Fetch-Site"))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "bad_origin", "Cross-origin request refused");
+        }
+    }
+
+    static boolean isRequestHost(String origin, String host) {
+        if (host == null || host.isBlank()) {
+            return false;
+        }
+        try {
+            String authority = java.net.URI.create(origin).getRawAuthority();
+            return authority != null && authority.equalsIgnoreCase(host.strip());
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 }
