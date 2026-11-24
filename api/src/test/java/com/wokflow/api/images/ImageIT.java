@@ -14,6 +14,8 @@ class ImageIT extends IntegrationTest {
     void merchantUploadsADishPhotoThatShowsEverywhere() throws Exception {
         var k = newKitchen(1);
         String m = signIn(k.merchantEmail());
+        String word = "marigold" + Long.toString(System.nanoTime() % 1_000_000, 36).replaceAll("[0-9]", "x");
+        db.sql("update dishes set name = ? where id = ?").params("Fried Rice " + word, k.plainDish()).update();
         var res = http.upload("/api/merchant/dishes/" + k.plainDish() + "/image", m, "rice.png", "image/png",
                 ImageServiceTest.png(1600, 1200));
         assertThat(res.status()).isEqualTo(200);
@@ -32,7 +34,8 @@ class ImageIT extends IntegrationTest {
         var menu = http.get("/api/restaurants/" + k.slug(), null).body();
         assertThat(menu.toString()).contains("\"image\":\"" + base + "\"");
         assertThat(menu.get("restaurant").get("image").asText()).isEqualTo(base);
-        waitUntil(() -> http.get("/api/search?q=fried%20rice", null).body().toString().contains(base));
+        // every test kitchen sells a "Fried Rice", so search for this kitchen's own (renamed) one
+        waitUntil(() -> http.get("/api/search?q=" + word, null).body().toString().contains(base));
 
         // wrong type, other people's dishes, customers
         assertThat(http.upload("/api/merchant/dishes/" + k.plainDish() + "/image", m, "x.gif", "image/gif",
