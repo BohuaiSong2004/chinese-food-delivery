@@ -31,7 +31,8 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Delivers outbox rows to handlers. Every replica runs one publisher; rows are
  * claimed with FOR UPDATE SKIP LOCKED, so replicas share the work without
- * blocking each other. A trigger NOTIFYs on insert, so delivery normally starts
+ * blocking each other. A committed write wakes this replica's publisher at once
+ * (OutboxWakeup) and peers through a coalesced NOTIFY, so delivery normally starts
  * within milliseconds; a 1 s poll covers missed notifications and retries.
  */
 @Component
@@ -60,8 +61,9 @@ public class OutboxPublisher implements SmartLifecycle {
 
     public OutboxPublisher(JdbcClient db, TransactionTemplate tx, ObjectMapper json, List<OutboxHandler> all,
                            DataSourceProperties dataSource, AppProperties props, Clock clock, MeterRegistry meters,
-                           com.wokflow.api.common.RedisBreaker redisBreaker) {
+                           com.wokflow.api.common.RedisBreaker redisBreaker, OutboxWakeup wakeup) {
         this.redisBreaker = redisBreaker;
+        wakeup.onWake(this::signal);
         this.db = db;
         this.tx = tx;
         this.json = json;
