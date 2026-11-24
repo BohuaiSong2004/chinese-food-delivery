@@ -85,6 +85,15 @@ public class OrderRepository {
         }
     }
 
+    public record HistoryEntry(OrderStatus status, Long actorId, String note) {}
+
+    public Optional<HistoryEntry> historyAt(UUID orderId, int version) {
+        return db.sql("select status, actor_id, note from order_status_history where order_id = ? and version = ?")
+                .params(orderId, version)
+                .query((rs, i) -> new HistoryEntry(OrderStatus.valueOf(rs.getString(1)), (Long) rs.getObject(2), rs.getString(3)))
+                .optional();
+    }
+
     public void insertHistory(UUID orderId, int version, OrderStatus status, Long actorId, String note) {
         db.sql("insert into order_status_history (order_id, version, status, actor_id, note) values (?, ?, ?, ?, ?)")
                 .params(orderId, version, status.name(), actorId, note).update();
