@@ -5,7 +5,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.List;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.stereotype.Component;
@@ -13,16 +15,22 @@ import org.springframework.stereotype.Component;
 /**
  * Verifies "MockPay-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, t + '.' + body)>".
  * The timestamp is signed and must be recent, so a captured request cannot be
- * replayed later; several v1 values are accepted to allow secret rotation.
+ * replayed later. Rotation works from both ends: the sender may put several v1 values in one
+ * header, and the secret setting may list several secrets ("new,old").
  */
 @Component
 public class WebhookVerifier {
-    private final byte[] secret;
+    private final List<byte[]> secrets;
     private final Duration tolerance;
     private final Clock clock;
 
     public WebhookVerifier(AppProperties props, Clock clock) {
-        this.secret = props.payments().webhookSecret().getBytes(StandardCharsets.UTF_8);
+        // "new,old": during a rotation both secrets are accepted, until the provider stops signing with the old one
+        this.secrets = Arrays.stream(props.payments().webhookSecret().split(","))
+                .map(String::strip).filter(s -> !s.isEmpty()).map(s -> s.getBytes(StandardCharsets.UTF_8)).toList();
+        if (secrets.isEmpty()) {
+            throw new IllegalStateException("MOCKPAY_WEBHOOK_SECRET is empty");
+        }
         this.tolerance = props.payments().webhookTolerance();
         this.clock = clock;
     }
@@ -55,14 +63,16 @@ public class WebhookVerifier {
         if (age > tolerance.toSeconds()) {
             return false;
         }
-        byte[] expected = sign(secret, t, body);
-        for (String s : sigs) {
-            try {
-                if (MessageDigest.isEqual(expected, HexFormat.of().parseHex(s))) {
-                    return true;
+        for (byte[] secret : secrets) {
+            byte[] expected = sign(secret, t, body);
+            for (String s : sigs) {
+                try {
+                    if (MessageDigest.isEqual(expected, HexFormat.of().parseHex(s))) {
+                        return true;
+                    }
+                } catch (IllegalArgumentException ignored) {
+                    // not hex
                 }
-            } catch (IllegalArgumentException ignored) {
-                // not hex
             }
         }
         return false;

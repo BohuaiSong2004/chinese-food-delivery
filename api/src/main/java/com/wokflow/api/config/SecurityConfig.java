@@ -48,6 +48,10 @@ public class SecurityConfig {
     /** Verifies signature (ES256 only), expiry, issuer and audience — no database or network call. */
     @Bean
     JwtDecoder jwtDecoder(JwtKeys keys, AppProperties props) {
+        return decoder(keys, props);
+    }
+
+    public static JwtDecoder decoder(JwtKeys keys, AppProperties props) {
         var processor = new com.nimbusds.jwt.proc.DefaultJWTProcessor<com.nimbusds.jose.proc.SecurityContext>();
         processor.setJWSKeySelector(new com.nimbusds.jose.proc.JWSVerificationKeySelector<>(
                 com.nimbusds.jose.JWSAlgorithm.ES256, new com.nimbusds.jose.jwk.source.ImmutableJWKSet<>(keys.publicJwks())));

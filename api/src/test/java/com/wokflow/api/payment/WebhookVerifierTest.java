@@ -30,6 +30,18 @@ class WebhookVerifierTest {
     }
 
     @Test
+    void acceptsTheNewAndTheOldSecretWhileTheSettingListsBoth() {
+        var rotating = new WebhookVerifier(com.wokflow.api.support.TestProps.payments(
+                new AppProperties.Payments(null, null, "whsec_new, whsec_unit", Duration.ofMinutes(5), null)),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        long t = NOW.getEpochSecond();
+        assertThat(rotating.verify(body, WebhookVerifier.header("whsec_new", t, body))).isTrue();
+        assertThat(rotating.verify(body, WebhookVerifier.header("whsec_unit", t, body))).isTrue();
+        assertThat(rotating.verify(body, WebhookVerifier.header("whsec_other", t, body))).isFalse();
+        assertThat(v.verify(body, WebhookVerifier.header("whsec_new", t, body))).isFalse(); // not before the setting lists it
+    }
+
+    @Test
     void rejectsTamperingReplayAndGarbage() {
         long t = NOW.getEpochSecond();
         String good = WebhookVerifier.header("whsec_unit", t, body);

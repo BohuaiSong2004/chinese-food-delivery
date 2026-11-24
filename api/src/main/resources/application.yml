@@ -66,6 +66,8 @@ wokflow:
     access-ttl: ${JWT_ACCESS_TTL:15m}
     refresh-ttl: ${JWT_REFRESH_TTL:30d}
     refresh-cookie-secure: ${REFRESH_COOKIE_SECURE:false}
+    previous-public-keys: ${JWT_PREVIOUS_PUBLIC_KEYS:}          # retired keys still accepted after a rotation
+    previous-public-keys-file: ${JWT_PREVIOUS_PUBLIC_KEYS_FILE:}
   payments:
     base-url: ${MOCKPAY_URL:http://localhost:8090}
     secret-key: ${MOCKPAY_SECRET_KEY:sk_test_wokflow_dev}
