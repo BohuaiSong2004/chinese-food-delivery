@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 class WebhookVerifierTest {
     static final Instant NOW = Instant.parse("2026-06-01T12:00:00Z");
     final WebhookVerifier v = new WebhookVerifier(com.wokflow.api.support.TestProps.payments(
-            new AppProperties.Payments(null, null, "whsec_unit", Duration.ofMinutes(5), null)),
+            new AppProperties.Payments(null, null, "whsec_unit", Duration.ofMinutes(5), null, null, null)),
             Clock.fixed(NOW, ZoneOffset.UTC));
     final byte[] body = "{\"id\":\"evt_1\"}".getBytes(StandardCharsets.UTF_8);
 
@@ -32,7 +32,7 @@ class WebhookVerifierTest {
     @Test
     void acceptsTheNewAndTheOldSecretWhileTheSettingListsBoth() {
         var rotating = new WebhookVerifier(com.wokflow.api.support.TestProps.payments(
-                new AppProperties.Payments(null, null, "whsec_new, whsec_unit", Duration.ofMinutes(5), null)),
+                new AppProperties.Payments(null, null, "whsec_new, whsec_unit", Duration.ofMinutes(5), null, null, null)),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         long t = NOW.getEpochSecond();
         assertThat(rotating.verify(body, WebhookVerifier.header("whsec_new", t, body))).isTrue();

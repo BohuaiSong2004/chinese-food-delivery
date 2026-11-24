@@ -24,14 +24,20 @@ public class WebhookVerifier {
     private final Duration tolerance;
     private final Clock clock;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public WebhookVerifier(AppProperties props, Clock clock) {
+        this(props.payments().webhookSecret(), props.payments().webhookTolerance(), clock);
+    }
+
+    /** Stripe signs "Stripe-Signature" with exactly the same scheme, so one verifier serves both. */
+    public WebhookVerifier(String secretSetting, Duration tolerance, Clock clock) {
         // "new,old": during a rotation both secrets are accepted, until the provider stops signing with the old one
-        this.secrets = Arrays.stream(props.payments().webhookSecret().split(","))
+        this.secrets = Arrays.stream(secretSetting.split(","))
                 .map(String::strip).filter(s -> !s.isEmpty()).map(s -> s.getBytes(StandardCharsets.UTF_8)).toList();
         if (secrets.isEmpty()) {
-            throw new IllegalStateException("MOCKPAY_WEBHOOK_SECRET is empty");
+            throw new IllegalStateException("webhook secret is empty");
         }
-        this.tolerance = props.payments().webhookTolerance();
+        this.tolerance = tolerance;
         this.clock = clock;
     }
 

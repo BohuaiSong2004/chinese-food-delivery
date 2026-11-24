@@ -44,3 +44,26 @@ Locally, compose runs Mailpit: open <http://localhost:8025> to read what was sen
 mail host the API logs a masked address and never the link.
 
 Test: `PasswordIT`.
+
+## Switching payments to Stripe test mode
+
+MockPay is the default, so the stack runs with no accounts. To use a Stripe **test-mode**
+account instead (the adapter refuses `sk_live_` keys):
+
+```sh
+PAYMENT_PROVIDER=stripe
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...      # printed by `stripe listen`
+stripe listen --forward-to localhost:8000/api/payments/stripe/webhook
+```
+
+Each order gets one hosted Checkout Session (idempotency key `order-<id>`). Stripe events are
+translated into the same internal events MockPay sends (`checkout.session.completed` with
+`payment_status=paid` → paid; `async_payment_failed`/`expired` → declined; a succeeded refund
+→ refunded), so order transitions, de-duplication and the ledger are shared code.
+
+What is verified, and how: `StripeClientIT` runs the adapter against
+[stripe-mock](https://github.com/stripe/stripe-mock), which rejects any request that does not
+match Stripe's OpenAPI spec; `StripeEventsTest` covers the event mapping; `StripeWebhookIT`
+sends signed Stripe events through the real endpoint. stripe-mock returns canned responses,
+so the full flow against a real Stripe test account has not been run in this repo.
