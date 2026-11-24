@@ -40,9 +40,11 @@ public class AuthController {
 
     private final AuthService auth;
     private final AppProperties props;
+    private final PasswordService passwords;
 
-    public AuthController(AuthService auth, AppProperties props) {
+    public AuthController(AuthService auth, AppProperties props, PasswordService passwords) {
         this.auth = auth;
+        this.passwords = passwords;
         this.props = props;
     }
 
@@ -83,6 +85,34 @@ public class AuthController {
                  HttpServletResponse res) {
         requireSameOrigin(http);
         auth.signOut(token);
+        clearCookie(res);
+    }
+
+    public record Forgot(@NotBlank @Email @Size(max = 254) String email) {}
+
+    public record Reset(@NotBlank @Size(min = 20, max = 100) String token,
+                        @NotBlank @Size(min = 10, max = 128, message = "must be 10 to 128 characters") String password) {}
+
+    public record Change(@NotBlank @Size(max = 128) String currentPassword,
+                         @NotBlank @Size(min = 10, max = 128, message = "must be 10 to 128 characters") String newPassword) {}
+
+    /** Always 202, whether or not the address has an account. */
+    @PostMapping("/forgot")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    Map<String, String> forgot(@Valid @RequestBody Forgot req, HttpServletRequest http) {
+        passwords.forgot(req.email(), http.getRemoteAddr(), PasswordService.chinese(http.getHeader(HttpHeaders.ACCEPT_LANGUAGE)));
+        return Map.of("status", "If that address has an account, a reset link is on its way.");
+    }
+
+    @PostMapping("/reset")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void reset(@Valid @RequestBody Reset req) { passwords.reset(req.token(), req.password()); }
+
+    /** Bearer-authenticated; ends every session, including this browser's refresh cookie. */
+    @PostMapping("/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void change(@Valid @RequestBody Change req, HttpServletResponse res) {
+        passwords.change(CurrentUser.require(), req.currentPassword(), req.newPassword());
         clearCookie(res);
     }
 

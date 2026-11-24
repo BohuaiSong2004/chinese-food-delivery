@@ -67,6 +67,20 @@ public class RateLimiter {
         }
     }
 
+    /** Forgets the attempts counted for a subject (e.g. failed sign-ins after a successful password reset). */
+    public void clear(String name, String subject, Duration window) {
+        if (!enabled) {
+            return;
+        }
+        long slot = clock.millis() / window.toMillis();
+        String base = "rl:" + name + ":" + subject + ":";
+        try {
+            redis.delete(List.of(base + slot, base + (slot - 1)));
+        } catch (RuntimeException e) {
+            log.warn("Rate limiter unavailable, could not clear {}: {}", name, e.toString());
+        }
+    }
+
     private void run(String name, String subject, int limit, Duration window, String mode) {
         if (!enabled) {
             return;
