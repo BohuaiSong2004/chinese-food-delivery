@@ -37,9 +37,20 @@ export async function fillCart(page: Page, dishes: string[]) {
   await page.getByRole('link', { name: /View cart/ }).click();
 }
 
+/** Saves a delivery address from the cart (first order of a new customer). */
+export async function addAddressInCart(page: Page, street = '88 Garfield Ave', zip = '91801') {
+  await page.getByRole('button', { name: 'Add a new address' }).click();
+  await page.getByLabel('Street address').fill(street);
+  await page.getByLabel('ZIP code').fill(zip);
+  await page.getByRole('button', { name: 'Save address' }).click();
+  await expect(page.getByRole('radio', { name: new RegExp(street) })).toBeChecked();
+}
+
 /** Places the order and pays (or declines) on the sandbox provider's hosted page; returns the order id. */
 export async function checkout(page: Page, outcome: 'Pay' | 'Decline payment' = 'Pay') {
-  await page.getByLabel('Delivery address').fill('88 Garfield Ave, Alhambra');
+  const noAddress = page.getByText('Add a delivery address to place your order.');
+  await expect(noAddress.or(page.getByRole('radio', { checked: true }))).toBeVisible(); // addresses have loaded
+  if (await noAddress.isVisible()) await addAddressInCart(page);
   await page.getByRole('button', { name: 'Place order and pay' }).click();
   await expect(page).toHaveURL(/\/checkout\/pi_/);
   await expect(page.getByText('Sandbox')).toBeVisible();
@@ -50,3 +61,18 @@ export async function checkout(page: Page, outcome: 'Pay' | 'Decline payment' = 
 
 /** The visible status badge on the order page (the live region also holds a screen-reader copy). */
 export const orderStatus = (page: Page) => page.locator('.order-status .badge');
+
+export const uniqueEmail = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+
+/** Signs up through the form with an account type (customer, restaurant owner or rider). */
+export async function signUpAs(page: Page, type: 'Order food' | 'List my restaurant' | 'Deliver orders', name: string) {
+  const email = uniqueEmail(type === 'Order food' ? 'e2e' : type === 'List my restaurant' ? 'owner' : 'rider');
+  await page.goto('/signup');
+  await page.getByRole('radio', { name: type }).check();
+  await page.getByLabel('Your name').fill(name);
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password').fill('e2e-password-123');
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  return email;
+}

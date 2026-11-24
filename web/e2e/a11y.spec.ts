@@ -11,7 +11,7 @@ async function audit(page: Page) {
   expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 }
 
-for (const path of ['/', '/search?q=noodles', '/r/midnight-congee', '/r/chengdu-night-market', '/signin', '/cart']) {
+for (const path of ['/', '/search?q=noodles', '/r/midnight-congee', '/r/chengdu-night-market', '/signin', '/signup', '/cart', '/partner']) {
   test(`no WCAG 2.1 AA violations on ${path} @mobile`, async ({ page }) => {
     await page.goto(path);
     await expect(page.locator('main h1')).toBeVisible();
@@ -25,7 +25,16 @@ test('no WCAG 2.1 AA violations in the kitchen and rider consoles', async ({ pag
   await expect(page.getByRole('tab', { name: 'Orders' })).toBeVisible();
   await audit(page);
   await page.getByRole('tab', { name: 'Menu' }).click();
-  await expect(page.getByRole('table')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'New section' })).toBeVisible();
+  await audit(page);
+  await page.locator('.dish-row').first().getByRole('button', { name: /^Edit / }).click();
+  await expect(page.getByLabel('Photo')).toBeVisible();
+  await audit(page);
+  await page.getByRole('tab', { name: 'Reviews' }).click();
+  await expect(page.locator('main .stars, main .stars-none').first()).toBeVisible();
+  await audit(page);
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await expect(page.getByLabel('Upload a cover photo')).toBeVisible();
   await audit(page);
   await page.getByRole('tab', { name: 'Earnings' }).click();
   await expect(page.getByText('Available for payout')).toBeVisible();
@@ -34,5 +43,26 @@ test('no WCAG 2.1 AA violations in the kitchen and rider consoles', async ({ pag
   await signIn(page, 'rider@example.com');
   await page.goto('/rider');
   await expect(page.getByRole('heading', { name: 'Open jobs' })).toBeVisible();
+  await audit(page);
+});
+
+test('no WCAG 2.1 AA violations in the admin console and the account page', async ({ page }) => {
+  await signIn(page, 'admin@example.com');
+  await page.goto('/admin');
+  await expect(page.getByRole('heading', { name: 'Restaurant applications' })).toBeVisible();
+  await audit(page);
+  await page.getByRole('tab', { name: 'Restaurants' }).click();
+  await expect(page.getByRole('table')).toBeVisible();
+  await audit(page);
+  await page.getByRole('tab', { name: 'Ledger & health' }).click();
+  await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible();
+  await audit(page);
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await signIn(page, 'customer@example.com');
+  await page.goto('/account');
+  await expect(page.getByRole('heading', { name: 'Delivery addresses' })).toBeVisible();
+  await audit(page);
+  await page.getByRole('button', { name: /^Deliver to/ }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
   await audit(page);
 });

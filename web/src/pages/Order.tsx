@@ -4,8 +4,10 @@ import { useI18n, type Key } from '../lib/i18n';
 import { useLiveOrder } from '../lib/useLiveOrder';
 import { api, ApiError } from '../lib/api';
 import { dateTime, money, shortId, time } from '../lib/format';
-import type { OrderStatus } from '../lib/types';
 import { ErrorBox, Loading, Names, StatusBadge } from '../components/bits';
+import { Stars } from '../components/Stars';
+import { km } from '../lib/location';
+import type { OrderStatus, OrderView } from '../lib/types';
 
 const STEPS: [OrderStatus, Key][] = [
   ['PENDING_PAYMENT', 'step.placed'], ['PAID', 'step.paid'], ['ACCEPTED', 'step.accepted'],
@@ -85,13 +87,65 @@ export function Order() {
           <dt>{t('cart.delivery')}</dt><dd>{money(order.deliveryFeeCents)}</dd>
           <dt>{t('cart.total')}</dt><dd><strong>{money(order.totalCents)}</strong></dd>
         </dl>
-        <p className="muted">{t('order.deliverTo')}: {order.deliveryAddress} · {dateTime(order.createdAt, lang)}</p>
+        <p className="muted">{t('order.deliverTo')}: {order.deliveryAddress}{order.distanceM ? ` (${km(order.distanceM)})` : ''} · {dateTime(order.createdAt, lang)}</p>
+        {order.riderName && <p className="muted">{t('order.rider', { name: order.riderName })}</p>}
       </section>
+
+      {order.status === 'DELIVERED' && <ReviewBox order={order} />}
 
       {(order.status === 'PENDING_PAYMENT' || order.status === 'PAID') && (
         <button type="button" className="secondary-button" onClick={() => void cancel()}>{t('order.cancel')}</button>
       )}
       {actionError && <p className="notice error" role="alert">{actionError}</p>}
     </article>
+  );
+}
+
+/** After delivery: leave one review (stars + optional comment), then see it and any reply. */
+function ReviewBox({ order }: { order: OrderView }) {
+  const { t } = useI18n();
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<OrderView['review'] | null>(order.review ?? null);
+  if (done) {
+    return (
+      <section aria-labelledby="your-review" className="card">
+        <h2 id="your-review">{t('review.yours')}</h2>
+        <p><Stars rating={done.rating} /></p>
+        {done.comment && <p>{done.comment}</p>}
+        {done.reply && <p className="reply"><strong>{t('reviews.fromKitchen')}</strong> {done.reply}</p>}
+      </section>
+    );
+  }
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api(`/api/orders/${order.id}/review`, { method: 'POST', body: { rating, comment } });
+      setDone({ rating, comment: comment.trim() });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    }
+  };
+  return (
+    <section aria-labelledby="rate" className="card">
+      <h2 id="rate">{t('review.title')}</h2>
+      <form method="post" onSubmit={(e) => void submit(e)}>
+        <fieldset className="star-input">
+          <legend>{t('review.stars')}</legend>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <label key={n} className={n <= rating ? 'on' : ''}>
+              <input type="radio" name="rating" value={n} required checked={rating === n} onChange={() => setRating(n)} />
+              <span aria-hidden="true">★</span><span className="visually-hidden">{t('reviews.stars', { n })}</span>
+            </label>
+          ))}
+        </fieldset>
+        <label htmlFor="review-comment">{t('review.comment')}</label>
+        <textarea id="review-comment" maxLength={1000} rows={3} value={comment} onChange={(e) => setComment(e.target.value)} />
+        {error && <p className="notice error" role="alert">{error}</p>}
+        <button type="submit" disabled={rating === 0}>{t('review.submit')}</button>
+      </form>
+    </section>
   );
 }

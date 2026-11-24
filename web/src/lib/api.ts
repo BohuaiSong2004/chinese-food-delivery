@@ -2,7 +2,7 @@
 // httpOnly cookie scoped to /api/auth, so script on the page can never read it.
 
 export type Role = 'CUSTOMER' | 'MERCHANT' | 'RIDER' | 'ADMIN';
-export interface User { id: number; email: string; name: string; role: Role; restaurantIds: number[] }
+export interface User { id: number; email: string; name: string; role: Role; restaurantIds: number[]; pending?: boolean }
 export interface Session { accessToken: string; expiresAt: string; user: User }
 
 export class ApiError extends Error {
@@ -66,6 +66,24 @@ export async function api<T>(path: string, opts: Options = {}, retried = false, 
   if (!res.ok) {
     throw new ApiError(res.status, data?.code ?? 'error', data?.detail ?? res.statusText, data?.fields);
   }
+  return data as T;
+}
+
+/** multipart/form-data upload of one file (field "file"), with the same auth and refresh as api(). */
+export async function uploadFile<T>(path: string, file: File, retried = false): Promise<T> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(path, {
+    method: 'POST', body: form, credentials: 'same-origin',
+    headers: { Accept: 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+  });
+  if (res.status === 401 && !retried) {
+    const s = await refreshSession();
+    if (s) return uploadFile<T>(path, file, true);
+  }
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : undefined;
+  if (!res.ok) throw new ApiError(res.status, data?.code ?? 'error', data?.detail ?? res.statusText, data?.fields);
   return data as T;
 }
 

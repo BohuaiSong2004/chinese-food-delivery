@@ -5,7 +5,7 @@ interface Auth {
   user: User | null;
   ready: boolean;
   signIn: (email: string, password: string) => Promise<User>;
-  signUp: (email: string, password: string, name: string) => Promise<User>;
+  signUp: (email: string, password: string, name: string, accountType?: 'CUSTOMER' | 'MERCHANT' | 'RIDER') => Promise<User>;
   signOut: () => Promise<void>;
 }
 
@@ -31,8 +31,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     ready,
     signIn: async (email, password) => start(await api<Session>('/api/auth/signin', { method: 'POST', body: { email, password } })),
-    signUp: async (email, password, name) =>
-      start(await api<Session>('/api/auth/signup', { method: 'POST', body: { email, password, name } })),
+    signUp: async (email, password, name, accountType = 'CUSTOMER') =>
+      start(await api<Session>('/api/auth/signup', { method: 'POST', body: { email, password, name, accountType } })),
     signOut: async () => {
       await api('/api/auth/signout', { method: 'POST' }).catch(() => undefined);
       setAccessToken(null);

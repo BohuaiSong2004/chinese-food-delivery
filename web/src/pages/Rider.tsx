@@ -2,12 +2,28 @@ import { useState } from 'react';
 import { useFetch } from '../lib/useFetch';
 import { useLiveRefresh } from '../lib/useLiveList';
 import { useI18n } from '../lib/i18n';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, refreshSession } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { money, shortId } from '../lib/format';
 import type { OrderView } from '../lib/types';
 import { ErrorBox, Loading, Names, StatusBadge } from '../components/bits';
 
 export function Rider() {
+  const { user } = useAuth();
+  const { t } = useI18n();
+  if (user?.pending) {
+    return (
+      <section className="rider">
+        <h1>{t('rider.title')}</h1>
+        <p className="notice">{t('rider.pending')}</p>
+        <button type="button" className="secondary-button" onClick={() => void refreshSession()}>{t('rider.checkAgain')}</button>
+      </section>
+    );
+  }
+  return <RiderConsole />;
+}
+
+function RiderConsole() {
   const { t, names } = useI18n();
   const jobs = useFetch<OrderView[]>('/api/rider/jobs');
   const mine = useFetch<OrderView[]>('/api/rider/orders');

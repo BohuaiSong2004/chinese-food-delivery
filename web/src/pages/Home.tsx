@@ -3,23 +3,37 @@ import { useState } from 'react';
 import { useFetch } from '../lib/useFetch';
 import { useI18n } from '../lib/i18n';
 import { money, time } from '../lib/format';
+import { km, useDeliverTo } from '../lib/location';
 import type { RestaurantView, TrendingDish } from '../lib/types';
 import { ErrorBox, Loading, Names } from '../components/bits';
+import { Photo } from '../components/DishImage';
+import { Stars } from '../components/Stars';
 
 export const CUISINES = ['sichuan', 'cantonese', 'northwestern', 'shanghainese', 'hunan', 'shaanxi', 'taiwanese', 'dongbei'];
 
-export function RestaurantCard({ r }: { r: RestaurantView }) {
+export function DeliveryLine({ r }: { r: RestaurantView }) {
+  const { t } = useI18n();
+  const d = r.delivery;
+  if (!d) return <p className="muted">{t('r.fee', { fee: money(r.deliveryFeeCents) })} · {t('r.prep', { min: r.prepMinutes })}</p>;
+  if (!d.deliverable) return <p className="muted out-of-range">{t('r.outOfRange', { km: km(d.distanceM) })}</p>;
+  return <p className="muted">{t('r.fee', { fee: money(d.feeCents) })} · {t('r.eta', { min: d.etaMinutes })} · {km(d.distanceM)}</p>;
+}
+
+export function RestaurantCard({ r, eager = false }: { r: RestaurantView; eager?: boolean }) {
   const { t, lang, label } = useI18n();
   const state = !r.acceptingOrders ? t('r.paused') : r.openNow ? t('r.open') : r.nextOpening
     ? t('r.opensAt', { time: time(r.nextOpening, lang) }) : t('r.closed');
   return (
-    <li className="card restaurant-card">
-      <h3><Link to={`/r/${r.slug}`}><Names o={r} /></Link></h3>
-      <p className="muted">{label(r.cuisine)} · {r.neighborhood}</p>
-      <p className={r.openNow && r.acceptingOrders ? 'open' : 'closed'}>
-        {state} · {r.hours === '24h' ? t('r.hours24') : t('r.hours', { hours: r.hours })}
-      </p>
-      <p className="muted">{t('r.fee', { fee: money(r.deliveryFeeCents) })} · {t('r.prep', { min: r.prepMinutes })}</p>
+    <li className={`card restaurant-card${r.delivery && !r.delivery.deliverable ? ' dim' : ''}`}>
+      <Photo base={r.image} sizes="(max-width: 48rem) 100vw, 22rem" className="card-photo" eager={eager} />
+      <div className="card-body">
+        <h3><Link to={`/r/${r.slug}`}><Names o={r} /></Link></h3>
+        <p className="muted">{label(r.cuisine)} · {r.neighborhood} · <Stars rating={r.rating} count={r.ratingCount} /></p>
+        <p className={r.openNow && r.acceptingOrders ? 'open' : 'closed'}>
+          {state} · {r.hours === '24h' ? t('r.hours24') : t('r.hours', { hours: r.hours })}
+        </p>
+        <DeliveryLine r={r} />
+      </div>
     </li>
   );
 }
@@ -28,7 +42,8 @@ export function Home() {
   const { t, label } = useI18n();
   const navigate = useNavigate();
   const [q, setQ] = useState('');
-  const restaurants = useFetch<RestaurantView[]>('/api/restaurants');
+  const { query, deliverTo } = useDeliverTo();
+  const restaurants = useFetch<RestaurantView[]>(`/api/restaurants${query ? `?${query}` : ''}`);
   const trending = useFetch<TrendingDish[]>('/api/trending?limit=6');
 
   return (
@@ -69,9 +84,11 @@ export function Home() {
       </section>
 
       <section aria-labelledby="restaurants">
-        <h2 id="restaurants">{t('home.restaurants')}</h2>
+        <h2 id="restaurants">{deliverTo ? t('home.restaurantsNear', { place: deliverTo.label }) : t('home.restaurants')}</h2>
         {restaurants.error ? <ErrorBox error={restaurants.error} retry={restaurants.reload} /> : !restaurants.data ? <Loading /> : (
-          <ul className="grid">{restaurants.data.map((r) => <RestaurantCard key={r.id} r={r} />)}</ul>
+          <ul className={`grid${restaurants.loading ? ' stale' : ''}`} aria-busy={restaurants.loading}>
+            {restaurants.data.map((r, i) => <RestaurantCard key={r.id} r={r} eager={i < 2} />)}
+          </ul>
         )}
       </section>
     </>
