@@ -23,3 +23,5 @@ infra/.terraform/
 infra/*.tfstate*
 infra/terraform.tfvars
 api/data/
+# uploaded images in development mode (IMAGE_DIR defaults to ./data/images)
+/data/

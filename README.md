@@ -140,9 +140,11 @@ docker exec wf-pg sh -c 'until pg_isready -U wokflow; do sleep 1; done; psql -U 
 docker run -d --name wf-redis -p 6379:6379 redis:8.8.4-alpine
 docker run -d --name wf-es -p 9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false \
   -e cluster.routing.allocation.disk.threshold_enabled=false -e ES_JAVA_OPTS="-Xms512m -Xmx512m" elasticsearch:9.5.5
+docker run -d --name wf-mail -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.29   # password-reset mail
 
 mvn -q -DskipTests package
-JWT_PRIVATE_KEY_FILE=secrets/jwt.pem JWT_GENERATE_IF_MISSING=true java -jar api/target/wokflow-api.jar   # :8080
+JWT_PRIVATE_KEY_FILE=secrets/jwt.pem JWT_GENERATE_IF_MISSING=true SPRING_MAIL_HOST=localhost SPRING_MAIL_PORT=1025 \
+  java -jar api/target/wokflow-api.jar                                                                     # :8080
 java -jar mockpay/target/wokflow-mockpay.jar                                                              # :8090
 cd web && npm ci && npm run dev                                                                            # :5173
 ```
