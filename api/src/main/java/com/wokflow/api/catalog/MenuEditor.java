@@ -196,6 +196,39 @@ public class MenuEditor {
         });
     }
 
+    // ------------------------------------------------------------------ photos
+
+    public Dish requireOwnDish(CurrentUser u, long dishId) {
+        Dish d = catalog.dish(dishId).filter(x -> !x.archived()).orElseThrow(() -> ApiException.notFound("Dish"));
+        u.requireStaffOf(d.restaurantId());
+        return d;
+    }
+
+    /** Points the dish at an already-stored image (or none); the files themselves are immutable. */
+    public Dish setDishImage(CurrentUser u, long dishId, String imageKey) {
+        Dish d = catalog.dish(dishId).filter(x -> !x.archived()).orElseThrow(() -> ApiException.notFound("Dish"));
+        u.requireStaffOf(d.restaurantId());
+        tx.runVoid(() -> {
+            db.sql("update dishes set image_key = ?, version = version + 1, updated_at = now() where id = ?")
+                    .params(imageKey, dishId).update();
+            dishChanged(d.restaurantId(), dishId);
+        });
+        return catalog.dish(dishId).orElseThrow();
+    }
+
+    public void setRestaurantImage(CurrentUser u, long restaurantId, String imageKey) {
+        u.requireStaffOf(restaurantId);
+        tx.runVoid(() -> {
+            int n = db.sql("""
+                    update restaurants set image_key = ?, version = version + 1, menu_version = menu_version + 1,
+                        updated_at = now() where id = ?""").params(imageKey, restaurantId).update();
+            if (n == 0) {
+                throw ApiException.notFound("Restaurant");
+            }
+            outbox.publish(Outbox.RESTAURANT_CHANGED, Long.toString(restaurantId), Map.of("restaurantId", restaurantId));
+        });
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /** One editor at a time per menu for the checks that count rows (limits, complete reorder lists). */

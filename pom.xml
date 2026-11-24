@@ -30,7 +30,22 @@
     <bouncycastle.version>1.87</bouncycastle.version>
     <springdoc.version>3.2.1</springdoc.version>
     <jacoco.version>0.8.16</jacoco.version>
+    <twelvemonkeys.version>3.15.3</twelvemonkeys.version>
+    <metadata-extractor.version>2.22.0</metadata-extractor.version>
+    <awssdk.version>2.59.8</awssdk.version>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${awssdk.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <build>
     <pluginManagement>

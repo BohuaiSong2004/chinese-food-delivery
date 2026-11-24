@@ -13,6 +13,7 @@ x-api-env: &api-env
   MOCKPAY_SECRET_KEY: sk_test_wokflow_local
   MOCKPAY_WEBHOOK_SECRET: whsec_wokflow_local
   JWT_PRIVATE_KEY_FILE: /keys/jwt.pem
+  IMAGE_DIR: /data/images
   JWT_GENERATE_IF_MISSING: "true"
   FORWARD_HEADERS_STRATEGY: native   # trust X-Forwarded-For from nginx on the private network
   SEED_LOADTEST_USERS: ${SEED_LOADTEST_USERS:-0}
@@ -99,6 +100,7 @@ services:
     environment: *api-env
     volumes:
       - jwtkeys:/keys
+      - images:/data/images   # dish photos, shared by both replicas
     depends_on:
       postgres:
         condition: service_healthy
@@ -124,3 +126,4 @@ volumes:
   redisdata:
   esdata:
   jwtkeys:
+  images:

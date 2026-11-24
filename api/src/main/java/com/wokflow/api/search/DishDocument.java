@@ -28,4 +28,5 @@ public record DishDocument(
         @JsonProperty("popularity") double popularity,
         @JsonProperty("version") long version,
         /** Restaurant LIVE and dish not archived: only listed documents are ever returned. */
-        @JsonProperty("listed") boolean listed) {}
+        @JsonProperty("listed") boolean listed,
+        @JsonProperty("image") String image) {}

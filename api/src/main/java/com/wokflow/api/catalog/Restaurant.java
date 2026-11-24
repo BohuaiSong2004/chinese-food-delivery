@@ -10,7 +10,7 @@ public record Restaurant(
         long id, String slug, String name, String nameZh, String description, String cuisine, List<String> tags,
         String neighborhood, String address, int deliveryFeeCents, int minOrderCents, int prepMinutes,
         int commissionBps, LocalTime opensAt, LocalTime closesAt, boolean open24h, String timeZone,
-        boolean acceptingOrders, long version, RestaurantStatus status) {
+        boolean acceptingOrders, long version, RestaurantStatus status, String imageKey, String coverKey) {
 
     /** Listed on the storefront, searchable and able to take new orders. */
     public boolean live() { return status == RestaurantStatus.LIVE; }

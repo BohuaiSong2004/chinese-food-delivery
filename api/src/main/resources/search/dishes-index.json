@@ -205,6 +205,11 @@
       },
       "listed": {
         "type": "boolean"
+      },
+      "image": {
+        "type": "keyword",
+        "index": false,
+        "doc_values": false
       }
     }
   }

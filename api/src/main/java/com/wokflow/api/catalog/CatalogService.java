@@ -30,12 +30,14 @@ public class CatalogService {
     private final StringRedisTemplate redis;
     private final ObjectMapper json;
     private final HotMenuService hot;
+    private final com.wokflow.api.images.ImageService images;
     private final Clock clock;
     private final Counter hits;
     private final Counter misses;
 
     public CatalogService(CatalogRepository repo, StringRedisTemplate redis, ObjectMapper json, HotMenuService hot,
-                          Clock clock, MeterRegistry meters) {
+                          Clock clock, MeterRegistry meters, com.wokflow.api.images.ImageService images) {
+        this.images = images;
         this.repo = repo;
         this.redis = redis;
         this.json = json;
@@ -46,11 +48,11 @@ public class CatalogService {
     }
 
     /** Versioned key: a menu change bumps menu_version, so an old cached copy is simply never read again. */
-    static String menuKey(long restaurantId, long menuVersion) { return "menu:v1:" + restaurantId + ":" + menuVersion; }
+    static String menuKey(long restaurantId, long menuVersion) { return "menu:v2:" + restaurantId + ":" + menuVersion; }
 
     public List<RestaurantView> restaurants() {
         Instant now = clock.instant();
-        return repo.liveRestaurants().stream().map(r -> RestaurantView.of(r, now)).toList();
+        return repo.liveRestaurants().stream().map(r -> RestaurantView.of(r, now, images.url(r.coverKey()))).toList();
     }
 
     public MenuView menu(String slug) {
@@ -67,7 +69,7 @@ public class CatalogService {
                 .map(c -> new CategoryView(c.id(), c.name(), c.nameZh(), c.dishes().stream()
                         .map(d -> d.limited() ? withStock(d, stock.get(d.id())) : d).toList()))
                 .toList();
-        return new MenuView(RestaurantView.of(cached.restaurant(), clock.instant()), categories,
+        return new MenuView(RestaurantView.of(cached.restaurant(), clock.instant(), images.url(cached.restaurant().coverKey())), categories,
                 hot.top(restaurantId, cached));
     }
 
@@ -98,19 +100,19 @@ public class CatalogService {
                 .collect(Collectors.groupingBy(Dish::categoryId));
         List<CategoryView> categories = repo.categories(restaurantId).stream()
                 .map(c -> new CategoryView(c.id(), c.name(), c.nameZh(),
-                        byCategory.getOrDefault(c.id(), List.of()).stream().map(CatalogService::view).toList()))
+                        byCategory.getOrDefault(c.id(), List.of()).stream().map(this::view).toList()))
                 .filter(c -> !c.dishes().isEmpty())
                 .toList();
         return new CachedMenu(r, categories);
     }
 
-    static DishView view(Dish d) {
+    DishView view(Dish d) {
         return new DishView(d.id(), d.name(), d.nameZh(), d.description(), d.priceCents(), d.tags(), d.spiceLevel(),
-                d.available(), d.limited(), null);
+                d.available(), d.limited(), null, images.url(d.imageKey()));
     }
 
     private static DishView withStock(DishView d, Integer remaining) {
         return new DishView(d.id(), d.name(), d.nameZh(), d.description(), d.priceCents(), d.tags(), d.spiceLevel(),
-                d.available(), true, remaining == null ? 0 : remaining);
+                d.available(), true, remaining == null ? 0 : remaining, d.image());
     }
 }

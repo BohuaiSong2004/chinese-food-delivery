@@ -20,10 +20,13 @@ public class CatalogRepository {
     static final String RESTAURANT_COLS = """
             id, slug, name, name_zh, description, cuisine, tags, neighborhood, address, delivery_fee_cents,
             min_order_cents, prep_minutes, commission_bps, opens_at, closes_at, open_24h, time_zone,
-            accepting_orders, version, status""";
+            accepting_orders, version, status, image_key,
+            coalesce(image_key, (select d.image_key from dishes d where d.restaurant_id = restaurants.id
+                                 and d.archived_at is null and d.image_key is not null
+                                 order by ('signature' = any(d.tags)) desc, d.id limit 1)) as cover_key""";
     static final String DISH_COLS = """
             id, restaurant_id, category_id, name, name_zh, description, price_cents, tags, spice_level, available,
-            daily_stock, stock_remaining, version, archived_at is not null as archived""";
+            daily_stock, stock_remaining, version, archived_at is not null as archived, image_key""";
 
     private final JdbcClient db;
 
@@ -146,7 +149,7 @@ public class CatalogRepository {
                 rs.getInt("min_order_cents"), rs.getInt("prep_minutes"), rs.getInt("commission_bps"),
                 rs.getTime("opens_at").toLocalTime(), rs.getTime("closes_at").toLocalTime(), rs.getBoolean("open_24h"),
                 rs.getString("time_zone"), rs.getBoolean("accepting_orders"), rs.getLong("version"),
-                RestaurantStatus.valueOf(rs.getString("status")));
+                RestaurantStatus.valueOf(rs.getString("status")), rs.getString("image_key"), rs.getString("cover_key"));
     }
 
     static Dish dish(ResultSet rs, int n) throws SQLException {
@@ -154,7 +157,7 @@ public class CatalogRepository {
                 rs.getString("name_zh"), rs.getString("description"), rs.getInt("price_cents"),
                 strings(rs.getArray("tags")), rs.getInt("spice_level"), rs.getBoolean("available"),
                 (Integer) rs.getObject("daily_stock"), (Integer) rs.getObject("stock_remaining"), rs.getLong("version"),
-                rs.getBoolean("archived"));
+                rs.getBoolean("archived"), rs.getString("image_key"));
     }
 
     static List<String> strings(Array a) throws SQLException {

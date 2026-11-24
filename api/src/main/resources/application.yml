@@ -27,6 +27,10 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  servlet:
+    multipart:
+      max-file-size: 6MB
+      max-request-size: 6MB
 
 server:
   port: ${PORT:8080}
@@ -84,6 +88,15 @@ wokflow:
     # Leaves pool connections for webhooks and reads during a rush; extra placements queue in memory instead.
     placement-concurrency: ${ORDER_PLACEMENT_CONCURRENCY:12}
     placement-wait: 10s
+  images:
+    store: ${IMAGE_STORE:local}               # local | s3
+    dir: ${IMAGE_DIR:./data/images}
+    bucket: ${IMAGE_BUCKET:}
+    prefix: ${IMAGE_PREFIX:images/}
+    region: ${AWS_REGION:us-west-2}
+    endpoint: ${IMAGE_S3_ENDPOINT:}             # only for S3-compatible test servers
+    public-base: ${IMAGE_PUBLIC_BASE:/api/images}
+    generate-demo: ${IMAGE_GENERATE_DEMO:true}   # draw illustrations for seeded dishes without a photo
 
 logging:
   level:

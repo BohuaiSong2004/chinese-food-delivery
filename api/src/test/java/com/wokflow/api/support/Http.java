@@ -48,6 +48,32 @@ public class Http {
 
     public Res delete(String path, String token) { return send("DELETE", path, token, null, Map.of()); }
 
+    /** multipart/form-data with one file part named "file". */
+    public Res upload(String path, String token, String filename, String contentType, byte[] content) {
+        String boundary = "----wokflow" + System.nanoTime();
+        var out = new java.io.ByteArrayOutputStream();
+        String head = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + filename
+                + "\"\r\nContent-Type: " + contentType + "\r\n\r\n";
+        out.writeBytes(head.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        out.writeBytes(content);
+        out.writeBytes(("\r\n--" + boundary + "--\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Map<String, String> h = new LinkedHashMap<>();
+        h.put("Content-Type", "multipart/form-data; boundary=" + boundary);
+        if (token != null) {
+            h.put("Authorization", "Bearer " + token);
+        }
+        return raw("POST", path, out.toByteArray(), h);
+    }
+
+    /** Raw bytes and headers (for images). */
+    public HttpResponse<byte[]> bytes(String path) {
+        try {
+            return CLIENT.send(HttpRequest.newBuilder(URI.create(base + path)).build(), HttpResponse.BodyHandlers.ofByteArray());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public Res raw(String method, String path, byte[] body, Map<String, String> headers) {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path)).timeout(Duration.ofSeconds(30))
                 .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofByteArray(body));

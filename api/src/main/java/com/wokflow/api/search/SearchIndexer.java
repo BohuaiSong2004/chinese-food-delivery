@@ -55,7 +55,7 @@ public class SearchIndexer implements OutboxHandler {
             select d.id, d.restaurant_id, r.slug, r.name as rname, r.name_zh as rname_zh, r.cuisine, r.neighborhood,
                    d.name, d.name_zh, d.description, d.tags, d.spice_level, d.price_cents, d.available,
                    r.accepting_orders, d.version + r.version as doc_version, coalesce(p.qty, 0) as popularity,
-                   (r.status = 'LIVE' and d.archived_at is null) as listed
+                   (r.status = 'LIVE' and d.archived_at is null) as listed, d.image_key
             from dishes d
             join restaurants r on r.id = d.restaurant_id
             left join (
@@ -270,7 +270,7 @@ public class SearchIndexer implements OutboxHandler {
                 rs.getString("description"),
                 List.of((String[]) rs.getArray("tags").getArray()), rs.getInt("spice_level"), rs.getInt("price_cents"),
                 rs.getBoolean("available"), rs.getBoolean("accepting_orders"), rs.getDouble("popularity"),
-                rs.getLong("doc_version"), rs.getBoolean("listed"));
+                rs.getLong("doc_version"), rs.getBoolean("listed"), rs.getString("image_key"));
     }
 
     /** "Biang Biang Noodles" -> "biangbiangnoodles", so a run-together English query still finds it. */
