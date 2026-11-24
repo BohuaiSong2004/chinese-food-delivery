@@ -24,10 +24,12 @@ class RestockIT extends IntegrationTest {
     @Test
     void limitedDishesRefillOncePerLocalDay() {
         var k = newKitchen(40);
-        db.sql("update dishes set stock_remaining = 3, stock_day = current_date - 1 where id = ?").param(k.limitedDish()).update();
+        // "yesterday" in the restaurant's zone, not the database's UTC current_date - 1, which is the
+        // restaurant's own today from 16:00 to midnight in Los Angeles (CI caught this at 17:16 local)
+        LocalDate today = LocalDate.now(clock.withZone(ZoneId.of("America/Los_Angeles")));
+        db.sql("update dishes set stock_remaining = 3, stock_day = ? where id = ?").params(today.minusDays(1), k.limitedDish()).update();
         restock.run();
         assertThat(stock(k.limitedDish())).isEqualTo(40);
-        LocalDate today = LocalDate.now(ZoneId.of("America/Los_Angeles"));
         assertThat(db.sql("select stock_day from dishes where id = ?").param(k.limitedDish()).query(LocalDate.class).single()).isEqualTo(today);
 
         // later the same day: sales are not undone by another run

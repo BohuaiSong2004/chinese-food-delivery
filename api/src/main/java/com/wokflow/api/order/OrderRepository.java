@@ -139,9 +139,27 @@ public class OrderRepository {
                 .list();
     }
 
-    public List<Order> forCustomer(long customerId, int limit) {
-        return db.sql("select " + COLS + " from orders where customer_id = ? order by created_at desc limit ?")
-                .params(customerId, limit).query(OrderRepository::map).list();
+    /** One keyset page (limit + 1 rows, see Cursor.page) of orders matching an owner column, newest first. */
+    public List<Order> page(String ownerColumn, Long ownerId, String status, com.wokflow.api.common.Cursor after, int limit) {
+        if (!java.util.Set.of("customer_id", "restaurant_id", "rider_id", "none").contains(ownerColumn)) {
+            throw new IllegalArgumentException(ownerColumn);
+        }
+        String owner = ownerColumn.equals("none") ? "true" : ownerColumn + " = :owner";
+        return db.sql("select " + COLS + " from orders where " + owner + """
+                  and (:status::text is null or status = :status::text)
+                  and (:at::timestamptz is null or (created_at, id) < (:at::timestamptz, :id::uuid))
+                order by created_at desc, id desc limit :n""")
+                .param("owner", ownerId).param("status", status)
+                .param("at", after == null ? null : Timestamp.from(after.at())).param("id", after == null ? null : after.id())
+                .param("n", limit + 1)
+                .query(OrderRepository::map).list();
+    }
+
+    /** A rider's deliveries that are not finished yet. */
+    public List<Order> activeForRider(long riderId) {
+        return db.sql("select " + COLS + """
+                 from orders where rider_id = ? and status in ('ACCEPTED', 'READY', 'PICKED_UP') order by created_at""")
+                .param(riderId).query(OrderRepository::map).list();
     }
 
     /** Active orders plus the last day of finished ones, for the merchant board. */
@@ -158,11 +176,6 @@ public class OrderRepository {
                  from orders where rider_id is null and status in ('ACCEPTED', 'READY')
                 order by updated_at limit ?""")
                 .param(limit).query(OrderRepository::map).list();
-    }
-
-    public List<Order> forRider(long riderId, int limit) {
-        return db.sql("select " + COLS + " from orders where rider_id = ? order by updated_at desc limit ?")
-                .params(riderId, limit).query(OrderRepository::map).list();
     }
 
     public List<UUID> overdue(Instant now, int limit) {

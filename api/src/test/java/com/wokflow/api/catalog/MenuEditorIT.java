@@ -64,7 +64,7 @@ class MenuEditorIT extends IntegrationTest {
         assertThat(placeOrder(customer, k.id(), Map.of(id, 1), unique("k")).code()).isEqualTo("dish_unavailable");
         waitUntil(() -> !http.get("/api/search?q=typhoon", null).body().toString().contains("Typhoon Shelter Crab"));
         // the old order still shows the dish
-        assertThat(http.get("/api/orders", customer).body().toString()).contains("Typhoon Shelter Crab");
+        assertThat(http.get("/api/orders", customer).body().get("items").toString()).contains("Typhoon Shelter Crab");
 
         // the name is free again once archived, and the empty section can be removed
         assertThat(http.post("/api/merchant/restaurants/" + k.id() + "/dishes", m, dish(cat, "Typhoon Shelter Crab", 4000, null)).status())

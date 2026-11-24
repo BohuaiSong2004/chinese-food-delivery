@@ -296,8 +296,34 @@ public class OrderService {
         return payments.ensureCheckout(id);
     }
 
-    public List<OrderView> mine(CurrentUser user) {
-        return orders.forCustomer(user.id(), 30).stream().map(this::view).toList();
+    public com.wokflow.api.common.Cursor.Page<OrderView> mine(CurrentUser user, String cursor, Integer limit) {
+        return page("customer_id", user.id(), null, cursor, limit);
+    }
+
+    public com.wokflow.api.common.Cursor.Page<OrderView> history(long restaurantId, CurrentUser user, String status, String cursor, Integer limit) {
+        user.requireStaffOf(restaurantId);
+        return page("restaurant_id", restaurantId, status, cursor, limit);
+    }
+
+    public com.wokflow.api.common.Cursor.Page<OrderView> riderHistory(CurrentUser user, String cursor, Integer limit) {
+        return page("rider_id", user.id(), null, cursor, limit);
+    }
+
+    public com.wokflow.api.common.Cursor.Page<OrderView> all(CurrentUser admin, String status, String cursor, Integer limit) {
+        if (!admin.is(Role.ADMIN)) {
+            throw ApiException.forbidden();
+        }
+        return page("none", null, status, cursor, limit);
+    }
+
+    private com.wokflow.api.common.Cursor.Page<OrderView> page(String column, Long owner, String status, String cursor, Integer limit) {
+        if (status != null && java.util.Arrays.stream(OrderStatus.values()).noneMatch(s -> s.name().equals(status))) {
+            throw ApiException.badRequest("bad_status", "Unknown status " + status);
+        }
+        int n = com.wokflow.api.common.Cursor.limit(limit, 20);
+        var rows = orders.page(column, owner, status, com.wokflow.api.common.Cursor.decode(cursor), n);
+        var p = com.wokflow.api.common.Cursor.page(rows, n, o -> new com.wokflow.api.common.Cursor(o.createdAt(), o.id().toString()));
+        return new com.wokflow.api.common.Cursor.Page<>(p.items().stream().map(this::view).toList(), p.next());
     }
 
     public List<OrderView> forRestaurant(long restaurantId, CurrentUser user) {
@@ -310,7 +336,7 @@ public class OrderService {
     }
 
     public List<OrderView> riderOrders(CurrentUser user) {
-        return orders.forRider(user.id(), 30).stream().map(this::view).toList();
+        return orders.activeForRider(user.id()).stream().map(this::view).toList();
     }
 
     void authorizeView(Order o, CurrentUser u) {

@@ -79,10 +79,19 @@ public class MerchantController {
         return orders.forRestaurant(rid, CurrentUser.require());
     }
 
+    @GetMapping("/restaurants/{rid}/orders/history")
+    com.wokflow.api.common.Cursor.Page<OrderView> history(@PathVariable long rid,
+                                                          @org.springframework.web.bind.annotation.RequestParam(required = false) String status,
+                                                          @org.springframework.web.bind.annotation.RequestParam(required = false) String cursor,
+                                                          @org.springframework.web.bind.annotation.RequestParam(required = false) Integer limit) {
+        return orders.history(rid, CurrentUser.require(), status, cursor, limit);
+    }
+
     @GetMapping(path = "/restaurants/{rid}/events", produces = "text/event-stream")
-    SseEmitter events(@PathVariable long rid, @AuthenticationPrincipal Jwt jwt) {
+    SseEmitter events(@PathVariable long rid, @AuthenticationPrincipal Jwt jwt,
+                      @RequestHeader(name = "Last-Event-ID", required = false) String lastEventId) {
         CurrentUser.from(jwt).requireStaffOf(rid);
-        return live.open("restaurant:" + rid, OrderController.lifetime(jwt), null);
+        return live.open("restaurant:" + rid, OrderController.lifetime(jwt), null, lastEventId);
     }
 
     @PostMapping("/orders/{id}/{action}")

@@ -87,22 +87,33 @@ export async function uploadFile<T>(path: string, file: File, retried = false): 
   return data as T;
 }
 
-export interface StreamHandlers { onEvent: (name: string, data: string) => void; onOpen?: () => void; onDown?: () => void }
+export interface StreamHandlers {
+  onEvent: (name: string, data: string) => void;
+  /** resumed: the server is replaying what was missed since the last event (no refetch needed). */
+  onOpen?: (resumed: boolean) => void;
+  onDown?: () => void;
+}
 
 /**
  * Server-sent events over fetch (EventSource cannot send an Authorization
- * header). Reconnects with backoff; the server closes the stream when the
- * access token expires, so each reconnect refreshes first if needed.
+ * header). Reconnects with backoff, sending Last-Event-ID so the server replays
+ * exactly what was missed; the server closes the stream when the access token
+ * expires, so each reconnect refreshes first if needed.
  */
 export function openStream(path: string, h: StreamHandlers): () => void {
   const ctl = new AbortController();
   let attempt = 0;
+  let lastId: string | null = null;
   const run = async () => {
     while (!ctl.signal.aborted) {
       try {
         if (!accessToken) await refreshSession();
         const res = await fetch(path, {
-          headers: { Accept: 'text/event-stream', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+          headers: {
+            Accept: 'text/event-stream',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            ...(lastId ? { 'Last-Event-ID': lastId } : {}),
+          },
           signal: ctl.signal,
         });
         if (res.status === 401) {
@@ -111,7 +122,7 @@ export function openStream(path: string, h: StreamHandlers): () => void {
         }
         if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
         attempt = 0;
-        h.onOpen?.();
+        h.onOpen?.(lastId !== null);
         const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
         let buf = '';
         for (;;) {
@@ -123,11 +134,14 @@ export function openStream(path: string, h: StreamHandlers): () => void {
             const block = buf.slice(0, idx);
             buf = buf.slice(idx + 2);
             let name = 'message';
+            let id: string | null = null;
             const data: string[] = [];
             for (const line of block.split('\n')) {
               if (line.startsWith('event:')) name = line.slice(6).trim();
               else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+              else if (line.startsWith('id:')) id = line.slice(3).trim();
             }
+            if (id) lastId = id;
             if (data.length) h.onEvent(name, data.join('\n'));
           }
         }
