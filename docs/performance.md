@@ -21,3 +21,5 @@ Caching verified JWT tokens roughly doubles throughput for authenticated endpoin
 Public pages score highly on Lighthouse performance, accessibility, best practices, and SEO.
 
 Details of the measurement scripts are in `loadtest/`.
+
+<!-- small wording note -->
